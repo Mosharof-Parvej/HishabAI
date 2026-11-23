@@ -9,11 +9,16 @@
     <select name="kind" style="width:130px"><option value="">All types</option><option value="expense" {% if f.kind == 'expense' %}selected{% endif %}>Expense</option><option value="income" {% if f.kind == 'income' %}selected{% endif %}>Income</option></select>
     <select name="cat" style="width:170px"><option value="">All categories</option>{% for c in cats %}<option value="{{ c.id }}" {% if f.cat == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
     <select name="acc" style="width:150px"><option value="">All accounts</option>{% for a in accts %}<option value="{{ a.id }}" {% if f.acc == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select>
+    <label class="row sm" style="margin:0;font-weight:500">From <input type="date" name="from" value="{{ f.from }}" style="width:150px"></label>
+    <label class="row sm" style="margin:0;font-weight:500">To <input type="date" name="to" value="{{ f.to }}" style="width:150px"></label>
     <button class="btn">Filter</button>
+    {% if request.GET %}<a class="btn" href="{% url 'transactions' %}">Clear</a>{% endif %}
     <a class="btn outline" href="{% url 'transactions_csv' %}?{{ qs }}" style="margin-left:auto">Export CSV</a>
     <a class="btn" href="{% url 'transaction_add' %}">+ Add manually</a>
     <a class="btn primary" href="{% url 'smart_entry' %}">✦ Add with AI</a>
   </form>
+  <div class="row wrap sm" style="margin-bottom:10px;gap:18px"><span class="muted">{{ sums.count }} transaction{{ sums.count|pluralize }}</span>
+    <span>Income <b class="income">{{ sums.income|taka }}</b></span><span>Expense <b class="expense">{{ sums.expense|taka }}</b></span><span>Balance <b>{{ sums.balance|taka }}</b></span></div>
   <div style="overflow-x:auto"><table>
     <thead><tr><th>Date</th><th>Note</th><th>Category</th><th>Account</th><th class="right">Amount</th><th></th></tr></thead>
     {% for t in page %}<tr>

@@ -14,6 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Sum
 from django.core.validators import validate_email
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -334,18 +335,29 @@ def _filtered(request):
     acc = request.GET.get("acc", "")
     if acc.isdigit():
         qs = qs.filter(account_id=int(acc))
+    d_from, d_to = parse_date(request.GET.get("from")), parse_date(request.GET.get("to"))
+    if d_from and d_to and d_from > d_to:
+        d_from, d_to = d_to, d_from
+    if d_from:
+        qs = qs.filter(date__gte=d_from)
+    if d_to:
+        qs = qs.filter(date__lte=d_to)
     return qs
 
 
 @login_required
 def transactions(request):
-    page = Paginator(_filtered(request), 30).get_page(request.GET.get("page"))
+    qs = _filtered(request)
+    agg = {r["kind"]: r["s"] for r in qs.order_by().values("kind").annotate(s=Sum("amount"))}
+    income, expense = agg.get("income", Decimal(0)), agg.get("expense", Decimal(0))
+    page = Paginator(qs, 30).get_page(request.GET.get("page"))
     params = request.GET.copy()
     params.pop("page", None)
     return render(request, "core/transactions.html", {
         "nav": "transactions", "page": page, "cats": Category.objects.filter(user=request.user),
         "accts": Account.objects.filter(user=request.user),
-        "qs": params.urlencode(), "f": request.GET})
+        "qs": params.urlencode(), "f": request.GET,
+        "sums": {"income": income, "expense": expense, "balance": income - expense, "count": page.paginator.count}})
 
 
 @login_required

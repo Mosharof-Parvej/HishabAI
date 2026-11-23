@@ -244,6 +244,19 @@ class AppTests(TestCase):
         self.assertEqual(Budget.objects.get().limit, 1000)
         self.assertContains(self.c.get(reverse("budgets")), "90%")
 
+    def test_transactions_date_range_filter(self):
+        today = timezone.localdate()
+        for days, amt in [(0, 10), (5, 20), (20, 40)]:
+            Transaction.objects.create(user=self.user, kind="expense", amount=amt, date=today - timedelta(days=days), note=f"n{amt}")
+        url = reverse("transactions")
+        both = lambda a, b: self.c.get(url, {"from": (today - timedelta(days=a)).isoformat(), "to": (today - timedelta(days=b)).isoformat()})
+        r = both(6, 0)
+        self.assertEqual((r.context["sums"]["count"], r.context["sums"]["expense"]), (2, 30))
+        self.assertEqual(both(0, 6).context["sums"]["count"], 2)                        # reversed range is swapped
+        self.assertEqual(self.c.get(url, {"from": "garbage"}).context["sums"]["count"], 3)  # bad date ignored
+        csv_body = self.c.get(reverse("transactions_csv"), {"from": (today - timedelta(days=6)).isoformat()}).content.decode()
+        self.assertIn("n10", csv_body); self.assertNotIn("n40", csv_body)               # export honours the range
+
     def test_csv_export_neutralises_formulas(self):
         Transaction.objects.create(user=self.user, kind="expense", amount=5, note="=HYPERLINK(1)")
         body = self.c.get(reverse("transactions_csv")).content.decode()
