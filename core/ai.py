@@ -14,7 +14,9 @@ from django.utils import timezone
 
 from .models import AICall
 
-TIMEOUT = 40
+# Primary gets a short timeout so a slow/overloaded Gemini falls through to Groq quickly.
+GEMINI_TIMEOUT = 12
+GROQ_TIMEOUT = 30
 
 
 class AIUnavailable(Exception):
@@ -37,7 +39,7 @@ def _gemini(system, prompt, json_mode):
         f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent",
         headers={"x-goog-api-key": settings.GEMINI_API_KEY},
         json=body,
-        timeout=TIMEOUT,
+        timeout=GEMINI_TIMEOUT,
     )
     r.raise_for_status()
     return "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
@@ -55,7 +57,7 @@ def _groq(system, prompt, json_mode):
         f"{settings.GROQ_BASE_URL.rstrip('/')}/chat/completions",
         headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
         json=body,
-        timeout=TIMEOUT,
+        timeout=GROQ_TIMEOUT,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]

@@ -27,10 +27,10 @@ You need **at least one**. With both, if the first fails or hits its limit the a
 > Free-tier prompts may be used by Google to improve its products — keep that in mind for real users' financial data.
 
 ### Groq (free backup — no card)
-Groq is a different company from xAI's Grok; it runs open models (Llama) on a free tier.
+Groq is a different company from xAI's Grok; it runs open models (e.g. gpt-oss, Llama) on a free tier.
 1. Go to https://console.groq.com and sign up (Google, GitHub or email).
 2. Open https://console.groq.com/keys → **Create API Key** → copy it (starts with `gsk_`; shown once) → `GROQ_API_KEY`.
-3. Default model is `llama-3.3-70b-versatile`; if it is retired, pick a current one from the console's *Models* page and set `GROQ_MODEL`.
+3. Default model is `openai/gpt-oss-120b`; if it is retired, pick a current one from the console's *Models* page and set `GROQ_MODEL`.
 
 > The Groq slot uses the OpenAI-style API, so `GROQ_BASE_URL`/`GROQ_MODEL` can also point to another compatible provider (e.g. xAI Grok with `https://api.x.ai/v1`, which is paid).
 
@@ -69,7 +69,7 @@ gh repo create hishabai --private --source=. --push     # or create on github.co
 | `SECRET_KEY` | `python -c "import secrets;print(secrets.token_urlsafe(50))"` |
 | `DATABASE_URL` | Neon pooled connection string |
 | `GEMINI_API_KEY` / `GROQ_API_KEY` | from section 2 |
-| `AI_PRIMARY`, `GEMINI_MODEL`, `GROQ_MODEL`, `GROQ_BASE_URL` | optional (defaults: `gemini`, `gemini-flash-latest`, `llama-3.3-70b-versatile`, `https://api.groq.com/openai/v1`) |
+| `AI_PRIMARY`, `GEMINI_MODEL`, `GROQ_MODEL`, `GROQ_BASE_URL` | optional (defaults: `gemini`, `gemini-flash-latest`, `openai/gpt-oss-120b`, `https://api.groq.com/openai/v1`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional |
 | `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS` | only for a custom domain, e.g. `https://expense.example.com`, `expense.example.com` |
 
