@@ -9,6 +9,7 @@
   <button class="btn primary" type="submit">Add with AI</button>
   <a class="btn" href="{% url 'transaction_add' %}">+ Add manually</a>
 </form>
+<div style="margin:-6px 0 14px">{% include "core/_ai_meter.html" %}</div>
 <div class="grid g4" style="margin-bottom:16px">
   <div class="card stat"><div class="lbl">Total Income <span class="chip g">+</span></div><div class="val">{{ cur.income|taka }}</div>
     {% if income_change is not None %}<span class="sm {% if income_change >= 0 %}income{% else %}expense{% endif %}">{{ income_change|stringformat:"+d" }}% vs last month</span>{% else %}<span class="sm muted">This month</span>{% endif %}</div>

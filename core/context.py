@@ -9,4 +9,5 @@ def shell(request):
     ctx = {"TRIAL_DAYS": settings.TRIAL_DAYS}
     if getattr(request, "user", None) and request.user.is_authenticated:
         ctx["reminders"] = services.reminders(request.user, timezone.localdate())
+        ctx["ai_usage"] = services.ai_usage(request.user)
     return ctx

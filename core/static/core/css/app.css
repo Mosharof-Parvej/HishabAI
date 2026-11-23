@@ -117,3 +117,8 @@ td{padding:10px 8px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
 .tag{margin-right:4px}
 @media print{.bell{display:none}}
 .edit{margin-top:8px;border-top:1px solid #F1F5F9;padding-top:8px}.edit summary{cursor:pointer;list-style:none}.edit form{margin-top:10px}
+/* voice input */
+button.rec{background:var(--expense)!important;color:#fff!important;border-color:var(--expense)!important;box-shadow:0 0 0 calc(var(--lvl,0)*12px + 3px) rgba(225,29,72,.28);transition:box-shadow .08s}
+.vstat{font-size:12px;color:var(--muted);align-self:center;white-space:nowrap}.vstat.live{color:var(--expense);font-weight:600}.vstat.err{color:var(--expense)}
+.vstat.busy{color:var(--primary-d)}
+.aimeter{max-width:260px}.aimeter .bar{margin:5px 0 0}

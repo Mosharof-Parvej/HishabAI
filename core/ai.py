@@ -3,6 +3,7 @@
 No SDKs on purpose - keeps the serverless bundle small. Groq uses the OpenAI-compatible
 chat-completions format, so GROQ_BASE_URL/GROQ_MODEL can also point at OpenRouter, xAI Grok, etc.
 """
+import base64
 import json
 import re
 from datetime import date, datetime, timedelta
@@ -73,15 +74,20 @@ def _providers():
     return available
 
 
-def ask(user, system, prompt, json_mode=False):
-    """Call the primary provider, fall back to the other. Enforces a per-user daily cap."""
-    providers = _providers()
+def _gate(user, providers):
+    """Refuse when no key is configured or the user's daily cap is used; otherwise count this call."""
     if not providers:
         raise AIUnavailable("No AI key configured. Set GEMINI_API_KEY and/or GROQ_API_KEY.")
     since = timezone.now() - timedelta(hours=24)
     if AICall.objects.filter(user=user, created_at__gte=since).count() >= settings.AI_DAILY_LIMIT:
         raise AIQuotaExceeded("Daily AI limit reached. Try again tomorrow.")
     AICall.objects.create(user=user)
+
+
+def ask(user, system, prompt, json_mode=False):
+    """Call the primary provider, fall back to the other. Enforces a per-user daily cap."""
+    providers = _providers()
+    _gate(user, providers)
     errors = []
     for name, fn in providers:
         try:
@@ -92,6 +98,55 @@ def ask(user, system, prompt, json_mode=False):
         except (requests.RequestException, KeyError, IndexError, ValueError) as e:
             errors.append(f"{name}: {e.__class__.__name__}")
     raise AIUnavailable("AI providers failed (" + "; ".join(errors) + ")")
+
+
+# ---------- speech to text (mic button) ----------
+
+# A mixed Bangla/English prompt makes Whisper write Bangla in Bengali script (not Devanagari) and keep English as English.
+STT_PROMPT = "আজ বাজারে ৫৪০ টাকা খরচ হলো। I paid 200 taka for lunch. bKash, Nagad, rickshaw, salary, ধার দিলাম।"
+GEMINI_STT = "Transcribe this audio exactly as spoken. It may be Bangla, English or Banglish. Write Bangla in Bengali script. Output only the transcript."
+
+
+def _groq_stt(audio, mime):
+    r = requests.post(
+        f"{settings.GROQ_BASE_URL.rstrip('/')}/audio/transcriptions",
+        headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+        files={"file": ("voice." + (mime.split("/")[-1].split(";")[0] or "webm"), audio, mime)},
+        data={"model": settings.GROQ_STT_MODEL, "temperature": "0", "response_format": "json", "prompt": STT_PROMPT},
+        timeout=GROQ_TIMEOUT,
+    )
+    r.raise_for_status()
+    return r.json()["text"]
+
+
+def _gemini_stt(audio, mime):
+    r = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent",
+        headers={"x-goog-api-key": settings.GEMINI_API_KEY},
+        json={"contents": [{"role": "user", "parts": [{"text": GEMINI_STT},
+                                                      {"inline_data": {"mime_type": mime.split(";")[0], "data": base64.b64encode(audio).decode()}}]}],
+              "generationConfig": {"temperature": 0}},
+        timeout=GROQ_TIMEOUT,
+    )
+    r.raise_for_status()
+    return "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
+
+
+def transcribe(user, audio, mime):
+    """Speech -> text. Whisper (Groq) is the dedicated speech model so it goes first; Gemini is the fallback."""
+    impls = []
+    if settings.GROQ_API_KEY:
+        impls.append(("groq", _groq_stt))
+    if settings.GEMINI_API_KEY:
+        impls.append(("gemini", _gemini_stt))
+    _gate(user, impls)
+    errors = []
+    for name, fn in impls:
+        try:
+            return fn(audio, mime).strip()
+        except (requests.RequestException, KeyError, IndexError, ValueError) as e:
+            errors.append(f"{name}: {e.__class__.__name__}")
+    raise AIUnavailable("Speech recognition failed (" + "; ".join(errors) + ")")
 
 
 def _parse_json(text):

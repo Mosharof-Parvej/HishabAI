@@ -41,11 +41,13 @@ def ai_endpoint(view):
         if not request.user.has_access:
             return JsonResponse({"error": "Your free trial has ended. Please subscribe to keep using AI."}, status=402)
         try:
-            return view(request, *a, **kw)
+            resp = view(request, *a, **kw)
         except ai.AIQuotaExceeded as e:
-            return JsonResponse({"error": str(e)}, status=429)
+            resp = JsonResponse({"error": str(e)}, status=429)
         except ai.AIUnavailable as e:
-            return JsonResponse({"error": f"AI is unavailable right now. {e}"}, status=503)
+            resp = JsonResponse({"error": f"AI is unavailable right now. {e}"}, status=503)
+        resp["X-AI-Used"] = str(services.ai_usage(request.user)["used"])  # lets the page update its usage meter live
+        return resp
 
     return wrapper
 
@@ -260,6 +262,20 @@ def api_insight(request):
         return JsonResponse({"text": ""})
     text = ai.insight(request.user, services.ai_context(request.user, today))
     AIInsight.objects.update_or_create(user=request.user, kind="dashboard", day=today, defaults={"text": text})
+    return JsonResponse({"text": text})
+
+
+@require_POST
+@ai_endpoint
+def api_transcribe(request):
+    f = request.FILES.get("audio")
+    if not f or f.size < 500:
+        return JsonResponse({"error": "I couldn't hear anything. Try again."}, status=400)
+    if f.size > 4_000_000 or not (f.content_type or "").startswith(("audio/", "video/webm")):
+        return JsonResponse({"error": "That recording is too long or not audio."}, status=400)
+    text = ai.transcribe(request.user, f.read(), f.content_type)[:2000]
+    if not text:
+        return JsonResponse({"error": "I couldn't hear anything. Try again."}, status=422)
     return JsonResponse({"text": text})
 
 

@@ -111,5 +111,6 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_STT_MODEL = os.environ.get("GROQ_STT_MODEL", "whisper-large-v3")  # speech-to-text for the mic button
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")

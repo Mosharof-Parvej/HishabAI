@@ -30,6 +30,7 @@ urlpatterns = [
     path("subscription/choose/", v.subscription_choose, name="subscription_choose"),
     path("settings/", v.settings_view, name="settings"),
     path("api/insight/", v.api_insight, name="api_insight"),
+    path("api/transcribe/", v.api_transcribe, name="api_transcribe"),
     path("api/extract/", v.api_extract, name="api_extract"),
     path("api/transactions/", v.api_save_transactions, name="api_save_transactions"),
     path("api/budget-suggestions/", v.api_budget_suggestions, name="api_budget_suggestions"),

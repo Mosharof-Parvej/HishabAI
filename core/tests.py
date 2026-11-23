@@ -128,6 +128,36 @@ class AppTests(TestCase):
         d = self.c.post(reverse("api_ask"), json.dumps({"question": "all"}), content_type="application/json").json()
         self.assertEqual((d["summary"]["income"], d["summary"]["expense"], d["summary"]["balance"]), (900.0, 350.0, 550.0))
 
+    @patch("core.ai.ask", return_value="{\"transactions\": []}")
+    def test_ai_usage_meter_and_header(self, _):
+        for _i in range(3):
+            AICall.objects.create(user=self.user)
+        page = self.c.get(reverse("smart_entry"))
+        self.assertEqual((page.context["ai_usage"]["used"], page.context["ai_usage"]["limit"]), (3, 60))
+        self.assertContains(page, "AI today:")
+        r = self.c.post(reverse("api_extract"), json.dumps({"text": "x"}), content_type="application/json")
+        self.assertEqual(r["X-AI-Used"], "3")   # ask() is mocked so no extra call was counted; header reflects real usage
+        other = User.objects.create_user("o@example.com", "s3cret-pass-9")
+        AICall.objects.create(user=other)
+        from . import services
+        self.assertEqual(services.ai_usage(self.user)["used"], 3)   # per user
+
+    @patch("core.ai._groq_stt", return_value="  আজ ২৫০ টাকা  ")
+    def test_transcribe_endpoint(self, stt):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        up = lambda n=2000, t="audio/webm": SimpleUploadedFile("voice", b"x" * n, content_type=t)
+        with override_settings(GROQ_API_KEY="k"):
+            r = self.c.post(reverse("api_transcribe"), {"audio": up()})
+            self.assertEqual(r.json(), {"text": "আজ ২৫০ টাকা"})
+            self.assertEqual(AICall.objects.filter(user=self.user).count(), 1)
+            self.assertEqual(self.c.post(reverse("api_transcribe"), {"audio": up(100)}).status_code, 400)          # too small
+            self.assertEqual(self.c.post(reverse("api_transcribe"), {"audio": up(t="text/plain")}).status_code, 400)  # not audio
+            self.assertEqual(self.c.post(reverse("api_transcribe"), {"audio": up(5_000_000)}).status_code, 400)    # too big
+            self.assertEqual(Client().post(reverse("api_transcribe"), {"audio": up()}).status_code, 401)           # logged out
+        with override_settings(GROQ_API_KEY="k", GEMINI_API_KEY="g"), patch("core.ai._groq_stt", side_effect=ai.requests.ConnectionError()), \
+                patch("core.ai._gemini_stt", return_value="fallback ok"):
+            self.assertEqual(self.c.post(reverse("api_transcribe"), {"audio": up()}).json(), {"text": "fallback ok"})
+
     def test_manual_add_validates_and_saves(self):
         food = Category.objects.get(user=self.user, name="Food")
         cash = Account.objects.get(user=self.user, name="Cash")

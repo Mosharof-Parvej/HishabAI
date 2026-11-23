@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.db.models.functions import TruncDay, TruncMonth
 
-from .models import Account, Budget, Debt, DebtPayment, Transaction
+from .models import AICall, Account, Budget, Debt, DebtPayment, Transaction
 
 ZERO = Decimal("0")
 
@@ -113,6 +113,18 @@ def ai_context(user, today):
             for t in recent
         ],
     }
+
+
+# ---------------------------------------------------------------- AI usage
+
+def ai_usage(user):
+    """AI calls in the last 24h vs the per-user daily cap (the same window the cap itself enforces)."""
+    from django.conf import settings
+    from django.utils import timezone
+
+    used = AICall.objects.filter(user=user, created_at__gte=timezone.now() - timedelta(hours=24)).count()
+    limit = settings.AI_DAILY_LIMIT
+    return {"used": used, "limit": limit, "pct": min(100, round(used / limit * 100)) if limit else 0}
 
 
 # ---------------------------------------------------------------- accounts
