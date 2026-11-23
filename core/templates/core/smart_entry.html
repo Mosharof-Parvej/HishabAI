@@ -8,7 +8,7 @@
   <textarea id="text" rows="4" placeholder="আজ দুপুরে খাবারে ২৫০ টাকা, রিকশা ভাড়া ৬০ টাকা দিলাম, আর টিউশনি থেকে ৫০০০ টাকা পেলাম।">{{ prefill }}</textarea>
   <div class="row between wrap" style="margin-top:10px">
     <div class="row sm"><span class="tag" id="lang">Detected: English</span><span class="muted">Tip: you can add many transactions in one message</span></div>
-    <div class="row"><button type="button" class="btn" id="mic" title="Speak (Bangla)">🎤</button><button class="btn primary" id="go">✦ Extract with AI</button></div>
+    <div class="row"><button type="button" class="btn" id="mic" title="Speak (Bangla)">{% include "core/_mic.html" %}</button><button class="btn primary" id="go">✦ Extract with AI</button></div>
   </div>
   <div style="margin-top:12px">{% include "core/_ai_meter.html" %}</div>
   <div class="msg error" id="err" style="display:none;margin-top:12px"></div>

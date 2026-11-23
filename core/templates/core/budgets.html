@@ -49,7 +49,7 @@
 Chart.defaults.color = cssVar("--muted");
 const D = JSON.parse(document.getElementById("daily-data").textContent);
 trackChart(new Chart(document.getElementById("daily"), {type:"line",
-  data:{labels:D.map((_, i) => i + 1),datasets:[{data:D,borderColor:cssVar("--income"),backgroundColor:cssVar("--primary-50"),fill:true,tension:.3,pointRadius:2}]},
+  data:{labels:D.map((_, i) => i + 1),datasets:[{data:D,borderColor:cssVar("--income"),cssBorder:"--income",backgroundColor:cssVar("--primary-50"),cssBg:"--primary-50",fill:true,tension:.3,pointRadius:2}]},
   options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c => taka(c.parsed.y)}}},scales:{y:{grid:{color:cssVar("--line")},beginAtZero:true},x:{grid:{display:false}}}}}));
 document.getElementById("tipbtn").onclick = async e => {
   const b = e.target, box = document.getElementById("tips"); b.disabled = true; box.textContent = "Thinking…";

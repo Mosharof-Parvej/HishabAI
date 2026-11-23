@@ -243,9 +243,29 @@ class AppTests(TestCase):
         self.assertNotIn("Log out", anon); self.assertNotIn("Transactions", anon)       # public pages show a plain header
         self.assertIn("Log in", anon)
 
+    def test_light_is_default_with_sidebar_and_avatar_only_profile_button(self):
+        page = self.c.get(reverse("dashboard")).content.decode()
+        self.assertIn('<aside class="side">', page)                                    # navigation lives on the left
+        self.assertIn(">Smart Entry<", page)
+        self.assertNotIn('class="topnav"', page)
+        btn = page.split('class="userbtn"')[1].split("</button>")[0]
+        self.assertIn('class="avatar"', btn); self.assertNotIn("Nayeem", btn.replace("Nayeem J", ""))  # no name beside the avatar
+        self.assertNotIn(self.user.display_name, btn)
+        css = open("core/static/core/css/app.css").read()
+        self.assertIn("--primary:#059669", css.split(":root[data-theme=dark]")[0])      # original green, light by default
+        self.assertNotIn("max-width:1120px", css)                                       # content is not squeezed into a narrow column
+
+    def test_voice_tries_groq_before_gemini(self):
+        order = []
+        with override_settings(GROQ_API_KEY="k", GEMINI_API_KEY="g"), \
+                patch("core.ai._groq_stt", side_effect=lambda *a: order.append("groq") or "ok"), \
+                patch("core.ai._gemini_stt", side_effect=lambda *a: order.append("gemini") or "no"):
+            self.assertEqual(ai.transcribe(self.user, b"x" * 900, "audio/webm"), "ok")
+        self.assertEqual(order, ["groq"])                                               # Gemini is only the fallback
+
     def test_stylesheet_has_light_dark_themes_and_reduced_motion(self):
         css = open("core/static/core/css/app.css").read()
-        for needle in ['[data-theme=light]', 'prefers-color-scheme:light', 'prefers-reduced-motion', 'prefers-reduced-transparency', 'backdrop-filter', '--spring:linear(']:
+        for needle in ['[data-theme=dark]', 'data-theme=system', 'prefers-color-scheme:dark', 'prefers-reduced-motion', 'prefers-reduced-transparency', 'backdrop-filter', '--spring:linear(']:
             self.assertIn(needle, css)
         self.assertNotRegex(css, r"font-size:\d+px")                                   # type scales with the user's text-size setting
 

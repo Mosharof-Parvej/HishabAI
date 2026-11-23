@@ -6,7 +6,7 @@
 <form class="aicard" action="{% url 'smart_entry' %}" id="aiform">
   <h2>{% tr "Tell me what you spent or earned — বাংলা, English, Banglish or any language" %}</h2>
   <div class="taw"><textarea name="text" id="aitext" maxlength="2000" placeholder="e.g. আজ বাজারে ৫৫০ টাকা খরচ, paid rent 12000, tuition theke 6000 pelam" required></textarea>
-    <div class="micwrap"><button type="button" id="mic">🎤</button></div></div>
+    <div class="micwrap"><button type="button" id="mic">{% include "core/_mic.html" %}</button></div></div>
   <div class="examples">
     <button type="button">আজ বাজারে ৫৫০, রিকশা ৮০</button><button type="button">gotokal lunch 250, recharge 100</button>
     <button type="button">salary 35000, rent 12000</button><button type="button">Rahim ke 500 taka dhar dilam</button></div>
@@ -38,7 +38,7 @@
     <div class="card"><h3 style="color:var(--text)">{% tr "Day by day" %}</h3><div class="chart-box" style="height:250px"><canvas id="daily"></canvas></div></div>
     <div class="card"><div class="row between"><h3 style="color:var(--text);margin:0">{% tr "Budgets" %}</h3><a class="link sm" href="{% url 'budgets' %}#edit">{% tr "Set budgets" %}</a></div>
       <div style="margin-top:12px">{% for b in budgets %}<div class="budget-row"><div class="row between"><span>{{ b.category.label }}</span><span class="sm">{{ b.spent|taka:2 }} / {{ b.limit|taka:2 }}</span></div>
-        <div class="bar white {% if b.level == 'danger' %}danger{% elif b.level == 'warn' %}warn{% endif %}"><i style="width:{{ b.pct|pct_cap }}%"></i></div></div>
+        <div class="bar {% if b.level == 'danger' %}danger{% elif b.level == 'warn' %}warn{% endif %}"><i style="width:{{ b.pct|pct_cap }}%"></i></div></div>
         {% empty %}<p class="muted sm">{% tr "No budgets yet — set a monthly limit per category." %}</p>{% endfor %}</div></div>
     <div class="card insight"><h3 style="color:var(--primary)"><span class="spark">✦</span> {% tr "AI insight" %}</h3><p id="insight" class="muted">{% tr "Analysing your spending…" %}</p></div>
   </div>
@@ -62,7 +62,7 @@
 Chart.defaults.color = cssVar("--muted"); Chart.defaults.font.family = "Inter, sans-serif";
 const D = JSON.parse(document.getElementById("daily-data").textContent);
 const dailyChart = trackChart(new Chart(document.getElementById("daily"), {type:"bar",
-  data:{labels:D.labels,datasets:[{label:"{% tr 'Expense' %}",data:D.expense,backgroundColor:cssVar("--expense"),borderRadius:3},{label:"{% tr 'Income' %}",data:D.income,backgroundColor:cssVar("--income"),borderRadius:3}]},
+  data:{labels:D.labels,datasets:[{label:"{% tr 'Expense' %}",data:D.expense,backgroundColor:cssVar("--expense"),cssBg:"--expense",borderRadius:3},{label:"{% tr 'Income' %}",data:D.income,backgroundColor:cssVar("--income"),cssBg:"--income",borderRadius:3}]},
   options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}}},scales:{y:{grid:{color:cssVar("--line")},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false},ticks:{maxTicksLimit:15}}}}}));
 const P = JSON.parse(document.getElementById("donut-data").textContent);
 if (P.values.length) trackChart(new Chart(document.getElementById("donut"), {type:"doughnut",

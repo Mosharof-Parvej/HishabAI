@@ -9,6 +9,7 @@ BN = {
     # navigation & menu
     "Dashboard": "ড্যাশবোর্ড", "Transactions": "লেনদেন", "Accounts": "অ্যাকাউন্ট", "Debts": "ধার-দেনা",
     "Categories & Budgets": "ক্যাটাগরি ও বাজেট", "Ask AI": "AI-কে জিজ্ঞেস করুন", "Profile": "প্রোফাইল", "Language": "ভাষা",
+    "Smart Entry": "স্মার্ট এন্ট্রি", "Upgrade Plan": "প্ল্যান আপগ্রেড করুন", "Log in": "লগ ইন",
     "About us": "আমাদের সম্পর্কে", "About & contact": "আমাদের সম্পর্কে ও যোগাযোগ", "Admin panel": "অ্যাডমিন প্যানেল", "Theme": "থিম",
     "Light": "লাইট", "Dark": "ডার্ক", "System": "সিস্টেম", "Reminders": "রিমাইন্ডার", "All debts": "সব ধার-দেনা",
     "Turn on notifications": "নোটিফিকেশন চালু করুন", "Notifications on": "নোটিফিকেশন চালু ✓", "Notifications blocked in browser settings": "ব্রাউজার সেটিংসে নোটিফিকেশন বন্ধ",

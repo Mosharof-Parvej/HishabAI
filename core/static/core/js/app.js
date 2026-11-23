@@ -28,21 +28,22 @@ window.taka = n => {
    (Whisper / Gemini) and the transcript is appended to the input. Works in every browser with a microphone,
    including Brave and Firefox, which do not ship the built-in Web Speech API. Esc cancels. */
 window.voice = (btn, input) => {
-  const IDLE = "🎤", REC = "⏹";
+  const IDLE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v4M8 22h8"/></svg>',
+        REC = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>';
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
     btn.disabled = true; btn.title = "Voice input isn't supported in this browser"; return;
   }
   const stat = document.createElement("span");
   stat.className = "vstat"; stat.hidden = true; stat.setAttribute("role", "status");
   btn.parentNode.insertBefore(stat, btn);
-  btn.type = "button"; btn.textContent = IDLE; btn.title = "Speak (Bangla or English)";
+  btn.type = "button"; btn.innerHTML = IDLE; btn.title = "Speak (Bangla or English)";
   let state = "idle", rec, stream, chunks, timer, raf, ctx, t0, cancelled = false;
 
   const say = (msg, cls = "") => { stat.textContent = msg; stat.className = "vstat " + cls; stat.hidden = !msg; };
   const fmt = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
   const cleanup = () => {
     clearInterval(timer); cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); ctx?.close().catch(() => {});
-    btn.classList.remove("rec"); btn.style.removeProperty("--lvl"); btn.textContent = IDLE;
+    btn.classList.remove("rec"); btn.style.removeProperty("--lvl"); btn.innerHTML = IDLE;
   };
 
   async function start() {
@@ -57,10 +58,10 @@ window.voice = (btn, input) => {
     rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     rec.onstop = finish;
     rec.start(); t0 = Date.now(); state = "recording";
-    btn.classList.add("rec"); btn.textContent = REC;
-    say("● Listening… 0:00 · tap ⏹ to finish", "live");
+    btn.classList.add("rec"); btn.innerHTML = REC;
+    say("● Listening… 0:00 · tap the square to finish", "live");
     timer = setInterval(() => {
-      const s = (Date.now() - t0) / 1000; say(`● Listening… ${fmt(s)} · tap ⏹ to finish`, "live");
+      const s = (Date.now() - t0) / 1000; say(`● Listening… ${fmt(s)} · tap the square to finish`, "live");
       if (s >= 60) stop();
     }, 250);
     try {  // live level ring around the button
@@ -112,20 +113,17 @@ window.voice = (btn, input) => {
     if (e.key !== "Escape") return;
     menus.forEach(m => { if (m.classList.contains("open")) { setOpen(m, false); m.querySelector("[data-menu-btn]").focus(); } });
   });
-  // the bar gets its divider only once content scrolls underneath it
-  const nav = document.querySelector(".topnav");
-  if (nav) { const f = () => nav.classList.toggle("scrolled", scrollY > 4); f(); addEventListener("scroll", f, {passive: true}); }
 })();
 
 /* ---------- theme: Light / Dark / System (remembered on this device), eased rather than flashed ---------- */
 (() => {
   const root = document.documentElement, btns = document.querySelectorAll("[data-theme-set]");
-  const current = () => { try { return localStorage.getItem("theme") || "system"; } catch (e) { return "system"; } };
+  const current = () => { try { return localStorage.getItem("theme") || "light"; } catch (e) { return "light"; } };
   const paint = () => btns.forEach(b => b.classList.toggle("on", b.dataset.themeSet === current()));
   btns.forEach(b => b.addEventListener("click", () => {
     const t = b.dataset.themeSet;
     root.classList.add("theming"); setTimeout(() => root.classList.remove("theming"), 450);
-    if (t === "system") { root.removeAttribute("data-theme"); try { localStorage.removeItem("theme"); } catch (e) {} }
+    if (t === "light") { root.removeAttribute("data-theme"); try { localStorage.removeItem("theme"); } catch (e) {} }   // light is the default look
     else { root.dataset.theme = t; try { localStorage.setItem("theme", t); } catch (e) {} }
     paint(); setTimeout(() => dispatchEvent(new Event("themechange")), 60);
   }));
@@ -139,7 +137,11 @@ window.chartTheme = chart => {
   const line = cssVar("--line"), muted = cssVar("--muted");
   Chart.defaults.color = muted;
   Object.values(chart.options.scales || {}).forEach(s => { if (s.grid && s.grid.display !== false) s.grid.color = line; });
-  chart.data.datasets.forEach(d => { if (d.borderColor === "card") d.borderColor = cssVar("--card"); });
+  chart.data.datasets.forEach(d => {   // datasets name the CSS variable they want, so they follow the theme
+    if (d.borderColor === "card") d.borderColor = cssVar("--card");
+    if (d.cssBg) d.backgroundColor = cssVar(d.cssBg);
+    if (d.cssBorder) d.borderColor = cssVar(d.cssBorder);
+  });
   chart.update("none");
 };
 window.trackChart = chart => { addEventListener("themechange", () => chartTheme(chart)); return chart; };
