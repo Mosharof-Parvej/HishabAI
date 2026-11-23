@@ -1,0 +1,18 @@
+{% extends "core/base.html" %}
+{% block title %}Help{% endblock %}
+{% block heading %}Help{% endblock %}
+{% block sub %}How HishabAI works{% endblock %}
+{% block content %}
+<div class="card prose">
+  <h2>Add transactions by typing or speaking</h2>
+  <p>On the dashboard, write (or tap 🎤 and speak) in Bangla, English or Banglish: <i>“আজ বাজারে ৫৫০ টাকা খরচ, tuition theke 6000 pelam”</i>. AI splits it into transactions, picks categories and accounts, and shows them for you to review. Nothing is saved until you press <b>Confirm &amp; Save</b>.</p>
+  <h2>Debts</h2>
+  <p>Say “Rahim ke 500 taka dhar dilam” and it goes to <b>Debts</b>, not to your expenses. Choose when to be reminded (on the day, or 1, 3 or 7 days before). Reminders appear under the 🔔 bell.</p>
+  <h2>Accounts</h2>
+  <p>You start with Cash, bKash, Nagad, Rocket, Bank and Card. Edit them, set the current balance, pick a bank or wallet logo, or add more on the <b>Accounts</b> page.</p>
+  <h2>Ask AI</h2>
+  <p>Ask “how much did I spend on food last month?” or “bKash diye ki ki kinechi?”. You get the matching transactions with income, expense and balance. The numbers come straight from your records.</p>
+  <h2>AI usage</h2>
+  <p>Each person has a daily AI allowance (shown as “AI today: % used”). It resets on a rolling 24-hour basis. Manual entry, accounts, debts and reports never use it.</p>
+</div>
+{% endblock %}

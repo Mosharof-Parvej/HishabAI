@@ -25,7 +25,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from django.templatetags.static import static
 
-from . import ai, catalog, services
+from . import ai, catalog, i18n, services
 from .models import AIInsight, Account, Budget, Category, Debt, DebtPayment, Transaction, User
 
 # ---------------------------------------------------------------- helpers
@@ -221,33 +221,39 @@ def google_callback(request):
 # ---------------------------------------------------------------- dashboard
 
 
+def _greeting(now):
+    h = now.hour
+    return "Good morning" if 5 <= h < 12 else "Good afternoon" if 12 <= h < 17 else "Good evening" if 17 <= h < 21 else "Good night"
+
+
 @login_required
 def dashboard(request):
-    today = timezone.localdate()
-    first, last = services.month_bounds(today.year, today.month)
-    pf, pl = services.month_bounds(*services.shift_month(today, -1).timetuple()[:2])
-    cur, prev = services.totals(request.user, first, last), services.totals(request.user, pf, pl)
-    cats = services.category_spend(request.user, first, last)
+    user, today = request.user, timezone.localdate()
+    this_month = today.replace(day=1)
+    month = parse_month(request.GET.get("month"), today)
+    first, last = services.month_bounds(month.year, month.month)
+    cur = services.totals(user, first, last)
+    cats = services.category_spend(user, first, last)
     total_exp = sum((c["total"] for c in cats), Decimal(0))
     for c in cats:
-        c["share"] = round(c["total"] / total_exp * 100) if total_exp else 0
+        c["share"] = round(c["total"] / total_exp * 100, 1) if total_exp else 0
+
+    # recent transactions: Day / Week (Saturday-start, as in Bangladesh) / Month, always ending today
+    rng = request.GET.get("range") if request.GET.get("range") in ("day", "week", "month") else "week"
+    start = {"day": today, "week": today - timedelta(days=(today.weekday() - 5) % 7), "month": this_month}[rng]
+    recent = Transaction.objects.filter(user=user, date__range=(start, today)).select_related("category", "account")[:30]
+
+    balances = services.account_balances(user)
     ctx = {
-        "today": today,
-        "cur": cur,
-        "income_change": pct_change(cur["income"], prev["income"]),
-        "expense_change": pct_change(cur["expense"], prev["expense"]),
-        "cats": cats[:6],
-        "recent": Transaction.objects.filter(user=request.user).select_related("category")[:5],
-        "series": services.monthly_series(request.user, first),
-        "donut": {"labels": [c["name"] for c in cats[:6]], "values": [float(c["total"]) for c in cats[:6]],
-                  "colors": [c["color"] for c in cats[:6]]},
-        "nav": "dashboard",
+        "nav": "dashboard", "today": today, "month": month, "greeting": i18n.tr(_greeting(timezone.localtime())),
+        "prev_month": services.shift_month(month, -1), "next_month": services.shift_month(month, 1), "is_current": month >= this_month,
+        "cur": cur, "saved_pct": round((cur["income"] - cur["expense"]) / cur["income"] * 100, 1) if cur["income"] else None,
+        "all_time": services.all_time_balance(user), "cats": cats,
+        "donut": {"labels": [c["name"] for c in cats], "values": [float(c["total"]) for c in cats], "colors": [c["color"] for c in cats]},
+        "daily": services.daily_series(user, first, last), "budgets": services.budget_status(user, first, last)[:6],
+        "accounts": balances, "debt_totals": services.debt_totals(services.debt_rows(user, today)),
+        "recent": recent, "range": rng, "range_start": start,
     }
-    balances = services.account_balances(request.user)
-    ctx["accounts"] = balances
-    ctx["accounts_total"] = sum((b for _, b in balances), Decimal(0))
-    rows = services.debt_rows(request.user, today)
-    ctx["debt_totals"] = services.debt_totals(rows)
     return render(request, "core/dashboard.html", ctx)
 
 
@@ -284,7 +290,7 @@ def api_transcribe(request):
 
 @login_required
 def smart_entry(request):
-    cats = list(Category.objects.filter(user=request.user).values("name", "kind"))
+    cats = list(Category.objects.filter(user=request.user).values("name", "kind", "emoji"))
     return render(request, "core/smart_entry.html",
                   {"nav": "entry", "cats": cats, "accts": account_names(request.user), "prefill": request.GET.get("text", "")[:2000], "today": timezone.localdate()})
 
@@ -378,10 +384,11 @@ def transactions(request):
 
 @login_required
 def transaction_add(request):
-    cats = list(Category.objects.filter(user=request.user).values("id", "name", "kind"))
+    cats = list(Category.objects.filter(user=request.user).values("id", "name", "kind", "emoji"))
     accts = Account.objects.filter(user=request.user)
     today = timezone.localdate()
-    ctx = {"nav": "transactions", "cats": cats, "accts": accts, "today": today, "v": {}}
+    cash = next((a for a in accts if a.kind == "cash"), None) or next(iter(accts), None)
+    ctx = {"nav": "transactions", "cats": cats, "accts": accts, "today": today, "v": {}, "sel": str(cash.id) if cash else ""}
     if request.method == "POST":
         p = request.POST
         kind = p.get("kind")
@@ -389,7 +396,7 @@ def transaction_add(request):
         cat = Category.objects.filter(user=request.user, pk=p.get("category") or 0, kind=kind).first() if p.get("category", "").isdigit() else None
         d = parse_date(p.get("date"))
         if kind not in ("expense", "income") or amount is None or cat is None or d is None or d > today:
-            ctx.update(v=p, error="Please enter a valid type, amount, category and a date that is not in the future.")
+            ctx.update(v=p, sel=p.get("account", ""), error="Please enter a valid type, amount, category and a date that is not in the future.")
             return render(request, "core/transaction_add.html", ctx)
         Transaction.objects.create(user=request.user, kind=kind, amount=amount, category=cat,
                                    account=user_account(request.user, p.get("account")), date=d, note=p.get("note", "").strip()[:200])
@@ -449,7 +456,7 @@ def budgets(request):
         "nav": "budgets", "month": month, "yearly": yearly, "months_list": month_options,
         "status": services.budget_status(request.user, first, last, months), "cats": cats,
         "daily": services.daily_spending(request.user, *services.month_bounds(month.year, month.month)),
-        "expense_cats": expense_cats, "total": total})
+        "expense_cats": expense_cats, "total": total, "all_cats": Category.objects.filter(user=request.user)})
 
 
 @require_POST
@@ -464,6 +471,25 @@ def budgets_save(request):
         if v is not None:
             Budget.objects.update_or_create(user=request.user, category=c, defaults={"limit": v})
     messages.success(request, "Budgets saved.")
+    return redirect("budgets")
+
+
+CATEGORY_COLORS = ["#22C55E", "#8B5CF6", "#F59E0B", "#06B6D4", "#6366F1", "#0EA5E9", "#EC4899", "#EF4444", "#14B8A6", "#D97706", "#F97316"]
+
+
+@require_POST
+@login_required
+def categories_add(request):
+    name, kind = request.POST.get("name", "").strip()[:40], request.POST.get("kind")
+    emoji = request.POST.get("emoji", "").strip()[:8]
+    if not name or kind not in ("expense", "income"):
+        messages.error(request, "Enter a category name and type.")
+    elif Category.objects.filter(user=request.user, name__iexact=name).exists():
+        messages.error(request, f"You already have a category named “{name}”.")
+    else:
+        n = Category.objects.filter(user=request.user).count()
+        Category.objects.create(user=request.user, name=name, kind=kind, emoji=emoji or "🏷️", color=CATEGORY_COLORS[n % len(CATEGORY_COLORS)])
+        messages.success(request, f"Category “{name}” added.")
     return redirect("budgets")
 
 
@@ -708,6 +734,16 @@ def subscription_choose(request):
     return redirect("subscription")
 
 
+@require_POST
+@login_required
+def set_language(request):
+    if request.POST.get("language") in ("bn", "en"):
+        request.user.language = request.POST["language"]
+        request.user.save(update_fields=["language"])
+    nxt = request.POST.get("next", "")
+    return redirect(nxt if url_has_allowed_host_and_scheme(nxt, {request.get_host()}, request.is_secure()) else "dashboard")
+
+
 @login_required
 def settings_view(request):
     if request.method == "POST":
@@ -721,6 +757,24 @@ def settings_view(request):
             request.user.name = request.POST.get("name", "").strip()[:80]
             request.user.language = "bn" if request.POST.get("language") == "bn" else "en"
             request.user.save(update_fields=["name", "language"])
-            messages.success(request, "Settings saved.")
+            messages.success(request, "Profile saved.")
         return redirect("settings")
     return render(request, "core/settings.html", {"nav": "settings"})
+
+
+# ---------------------------------------------------------------- public pages
+
+
+def help_page(request):
+    return render(request, "core/help.html", {"nav": ""})
+
+
+TEAM = ["Md. Parvej Mosharof", "Md. Naimur Rahman", "Md. Hridoy Ahmed Mahim"]
+
+
+def about_page(request):
+    return render(request, "core/about.html", {"nav": "", "team": TEAM})
+
+
+def privacy_page(request):
+    return render(request, "core/privacy.html", {"nav": ""})

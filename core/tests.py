@@ -21,7 +21,7 @@ class AppTests(TestCase):
         r = c.post(reverse("signup"), {"email": "New@Example.com", "password": "very-long-pass-1", "name": "N"})
         self.assertRedirects(r, reverse("dashboard"))
         u = User.objects.get(email="new@example.com")
-        self.assertEqual(u.categories.count(), 12)
+        self.assertEqual(u.categories.count(), 16)
         self.assertEqual(u.trial_days_left, 15)
         self.assertEqual(list(u.accounts.values_list('name', flat=True)), ['Cash', 'bKash', 'Nagad', 'Rocket', 'Bank', 'Card'])
         c.post(reverse("logout"))
@@ -157,6 +157,78 @@ class AppTests(TestCase):
         with override_settings(GROQ_API_KEY="k", GEMINI_API_KEY="g"), patch("core.ai._groq_stt", side_effect=ai.requests.ConnectionError()), \
                 patch("core.ai._gemini_stt", return_value="fallback ok"):
             self.assertEqual(self.c.post(reverse("api_transcribe"), {"audio": up()}).json(), {"text": "fallback ok"})
+
+    def test_dashboard_month_navigation_and_recent_ranges(self):
+        from . import services
+        today = timezone.localdate()
+        food = Category.objects.get(user=self.user, name="Food")
+        prev = services.shift_month(today.replace(day=1), -1)
+        Transaction.objects.create(user=self.user, kind="expense", amount=700, category=food, date=prev.replace(day=3), note="OldMonth")
+        Transaction.objects.create(user=self.user, kind="income", amount=1000, date=today, note="TodayIn", category=Category.objects.get(user=self.user, name="Salary"))
+        r = self.c.get(reverse("dashboard"))
+        self.assertEqual((r.context["cur"]["income"], r.context["cur"]["expense"]), (1000, 0))
+        self.assertTrue(r.context["is_current"])
+        self.assertEqual(r.context["all_time"], 300)   # 1000 income - 700 expense across months
+        r = self.c.get(reverse("dashboard"), {"month": prev.strftime("%Y-%m")})
+        self.assertEqual(r.context["cur"]["expense"], 700)
+        self.assertFalse(r.context["is_current"])
+        self.assertEqual(self.c.get(reverse("dashboard"), {"month": "2999-01"}).context["month"], today.replace(day=1))  # no future months
+        for rng, expect in [("day", ["TodayIn"]), ("week", ["TodayIn"]), ("month", ["TodayIn"])]:
+            self.assertEqual([t.note for t in self.c.get(reverse("dashboard"), {"range": rng}).context["recent"]], expect, rng)
+        week = self.c.get(reverse("dashboard")).context["range_start"]
+        self.assertEqual(week.weekday(), 5)            # weeks start on Saturday
+        self.assertContains(self.c.get(reverse("dashboard")), "Good ")
+
+    def test_categories_have_emoji_and_can_be_added(self):
+        self.assertEqual(Category.objects.get(user=self.user, name="Food").label, "🍚 Food")
+        self.c.post(reverse("categories_add"), {"name": "Pets", "emoji": "🐶", "kind": "expense"})
+        self.c.post(reverse("categories_add"), {"name": "pets", "emoji": "x", "kind": "expense"})   # duplicate (case-insensitive)
+        self.c.post(reverse("categories_add"), {"name": "", "kind": "expense"})
+        self.assertEqual(Category.objects.filter(user=self.user, name__iexact="pets").count(), 1)
+        self.assertEqual(Category.objects.get(user=self.user, name="Pets").emoji, "🐶")
+        # AI fallback is the real "Others", not whichever category happens to be last
+        names = {"expense": [c.name for c in Category.objects.filter(user=self.user, kind="expense")], "income": ["Salary", "Other Income"]}
+        with patch("core.ai.ask", return_value=json.dumps({"transactions": [{"type": "expense", "amount": 5, "category": "Nonsense", "date": timezone.localdate().isoformat()}]})):
+            self.assertEqual(ai.extract_transactions(self.user, "x", names)[0]["category"], "Others")
+
+    def test_language_switch_profile_menu_and_blank_about(self):
+        self.assertEqual(self.user.language, "en")                                   # English by default
+        page = self.c.get(reverse("dashboard"))
+        for label in ["Profile", "Language", "About us", "Dashboard"]:
+            self.assertContains(page, label)
+        self.assertContains(page, "বাংলা")                                              # language options are shown
+        self.c.post(reverse("set_language"), {"language": "bn", "next": reverse("transactions")})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.language, "bn")
+        page = self.c.get(reverse("dashboard"))
+        for label in ["ড্যাশবোর্ড", "লেনদেন", "প্রোফাইল", "ভাষা", "আমাদের সম্পর্কে", "আজ AI:"]:
+            self.assertContains(page, label)
+        self.assertNotContains(page, ">Transactions<")
+        r = self.c.post(reverse("set_language"), {"language": "bn", "next": "https://evil.example/"})
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)  # open redirect refused
+        self.c.post(reverse("set_language"), {"language": "xx"})                      # unknown language ignored
+        self.user.refresh_from_db(); self.assertEqual(self.user.language, "bn")
+        self.c.post(reverse("set_language"), {"language": "en"})
+        self.assertContains(self.c.get(reverse("dashboard")), "Dashboard")
+        about = self.c.get(reverse("about")).content.decode()
+        for name in ["Md. Parvej Mosharof", "Md. Naimur Rahman", "Md. Hridoy Ahmed Mahim", "Daffodil International University (DIU)"]:
+            self.assertIn(name, about)
+        self.assertEqual(Client().get(reverse("about")).status_code, 200)               # public page
+        self.assertEqual(self.c.get(reverse("settings")).status_code, 200)
+        self.assertEqual(reverse("settings"), "/profile/")
+        self.assertEqual(Client().post(reverse("set_language"), {"language": "bn"}).status_code, 302)  # needs login
+
+    def test_public_pages_and_footer(self):
+        for name in ["help", "about", "privacy"]:
+            self.assertEqual(Client().get(reverse(name)).status_code, 200, name)
+        self.assertContains(self.c.get(reverse("dashboard")), "Privacy")
+
+    def test_manual_form_defaults_to_today_and_cash(self):
+        r = self.c.get(reverse("transaction_add"))
+        cash = Account.objects.get(user=self.user, name="Cash")
+        self.assertEqual(r.context["sel"], str(cash.id))
+        self.assertContains(r, f'<option value="{cash.id}" selected>')
+        self.assertContains(r, f'value="{timezone.localdate().isoformat()}"')
 
     def test_manual_add_validates_and_saves(self):
         food = Category.objects.get(user=self.user, name="Food")

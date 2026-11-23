@@ -1,56 +1,54 @@
 {% load static ui %}<!doctype html>
-<html lang="en">
+<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>{% block title %}HishabAI{% endblock %} · HishabAI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{% static 'core/css/app.css' %}">
 </head>
 <body>
 {% block body %}
-<div class="app">
-  <aside class="side">
-    <div class="brand"><span class="logo">৳</span>HishabAI</div>
-    <nav class="nav">
-      <a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
-      <a href="{% url 'smart_entry' %}" class="{% if nav == 'entry' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Smart Entry</a>
-      <a href="{% url 'transactions' %}" class="{% if nav == 'transactions' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Transactions</a>
-      <a href="{% url 'budgets' %}" class="{% if nav == 'budgets' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>Budgets &amp; Reports</a>
-      <a href="{% url 'ask' %}" class="{% if nav == 'ask' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>AskHishabAI</a>
-      <a href="{% url 'accounts' %}" class="{% if nav == 'accounts' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V10m14 11V10M9 21V10m6 11V10M12 3l9 5H3z"/></svg>Accounts</a>
-      <a href="{% url 'debts' %}" class="{% if nav == 'debts' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h13l-3-3m3 3l-3 3M17 17H4l3-3m-3 3l3 3"/></svg>Debts{% if reminders %}<span class="count">{{ reminders|length }}</span>{% endif %}</a>
-      <a href="{% url 'subscription' %}" class="{% if nav == 'subscription' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Subscription</a>
-      <a href="{% url 'settings' %}" class="{% if nav == 'settings' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</a>
-    </nav>
-    <div class="trial">
-      {% if user.is_paid %}
-        <b>{{ user.plan|title }} plan</b><span class="sm muted">Active until {{ user.paid_until|date:"j M Y" }}</span>
-      {% else %}
-        <b>Free Trial</b><span class="sm muted">{{ user.trial_days_left }} of {{ TRIAL_DAYS }} days left</span>
-        <div class="bar {% if user.trial_days_left < 4 %}danger{% endif %}"><i style="width:{% widthratio user.trial_days_left TRIAL_DAYS 100 %}%"></i></div>
-        <a class="btn primary block sm" href="{% url 'subscription' %}">Upgrade Plan</a>
-      {% endif %}
-    </div>
-  </aside>
-  <main>
-    <div class="top">
-      <div><h1>{% block heading %}{% endblock %}</h1><p class="muted sm">{% block sub %}{% endblock %}</p></div>
-      <div class="top-r">
-        <form action="{% url 'transactions' %}"><input class="search" name="q" placeholder="Search transactions" value="{{ f.q }}"></form>
-        <details class="bell"><summary title="Repayment reminders"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>{% if reminders %}<b class="dotc">{{ reminders|length }}</b>{% endif %}</summary>
-          <div class="pop"><h4>Repayment reminders</h4>
-            {% for r in reminders %}<a href="{% url 'debts' %}" class="rem"><span><b>{{ r.debt.person }}</b><br><span class="sm muted">{% if r.debt.direction == 'borrowed' %}You owe{% else %}Owes you{% endif %} {{ r.remaining|taka }}</span></span>
-              <span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days < 0 %}{{ r.days|stringformat:"d"|cut:"-" }}d overdue{% elif r.days == 0 %}Due today{% else %}in {{ r.days }}d{% endif %}</span></a>
-            {% empty %}<p class="sm muted" style="padding:6px 0">No repayments due soon. 🎉</p>{% endfor %}</div></details>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="avatar" title="Log out ({{ user.email }})" style="border:0;cursor:pointer">{{ user.initials }}</button></form>
-      </div>
-    </div>
-    {% if not user.has_access %}<div class="notice" style="margin-bottom:16px"><b>Your free trial has ended.</b> Your records are safe, but AI features are paused. <a href="{% url 'subscription' %}" style="text-decoration:underline">Choose a plan</a></div>{% endif %}
-    {% if messages %}<div class="msgs">{% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
-    {% block content %}{% endblock %}
-  </main>
-</div>
+<header class="topnav"><div class="in">
+  <a class="brand" href="{% url 'dashboard' %}"><span class="logo">H<small>Ai</small></span><span>Hishab<b>AI</b></span></a>
+  <nav class="links">
+    <a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}">{% tr "Dashboard" %}</a>
+    <a href="{% url 'transactions' %}" class="{% if nav == 'transactions' %}active{% endif %}">{% tr "Transactions" %}</a>
+    <a href="{% url 'accounts' %}" class="{% if nav == 'accounts' %}active{% endif %}">{% tr "Accounts" %}</a>
+    <a href="{% url 'debts' %}" class="{% if nav == 'debts' %}active{% endif %}">{% tr "Debts" %}{% if reminders %}<span class="count">{{ reminders|length }}</span>{% endif %}</a>
+    <a href="{% url 'budgets' %}" class="{% if nav == 'budgets' %}active{% endif %}">{% tr "Categories & Budgets" %}</a>
+  </nav>
+  <a class="askpill {% if nav == 'ask' %}active{% endif %}" href="{% url 'ask' %}">{% tr "Ask AI" %}</a>
+  <div class="nav-r">
+    <details class="menu"><summary class="bellbtn" title="{% tr 'Repayment reminders' %}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg>{% if reminders %}<b class="dotc">{{ reminders|length }}</b>{% endif %}</summary>
+      <div class="pop"><h4>{% tr "Repayment reminders" %}</h4>
+        {% for r in reminders %}<a href="{% url 'debts' %}" class="rem"><span><b>{{ r.debt.person }}</b><br><span class="sm muted">{% if r.debt.direction == 'borrowed' %}{% tr "You owe" %}{% else %}{% tr "Owes you" %}{% endif %} {{ r.remaining|taka }}</span></span>
+          <span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days < 0 %}{{ r.days|stringformat:"d"|cut:"-" }}d {% tr "overdue" %}{% elif r.days == 0 %}{% tr "Due today" %}{% else %}{% tr "in" %} {{ r.days }}d{% endif %}</span></a>
+        {% empty %}<p class="sm muted" style="padding:6px 0">{% tr "No repayments due soon." %} 🎉</p>{% endfor %}
+        <hr><a class="item sm" href="{% url 'debts' %}">{% tr "Manage debts & reminders" %} →</a></div></details>
+    <details class="menu"><summary class="userbtn" title="{% tr 'Profile' %}"><span class="avatar">{{ user.initials|slice:":1" }}</span><span class="nm">{{ user.display_name }}</span><span class="muted sm">⌄</span></summary>
+      <div class="pop">
+        <div style="padding:4px 10px 8px"><b>{{ user.display_name }}</b><div class="sm muted">{{ user.email }}</div></div>
+        <a class="item" href="{% url 'settings' %}">👤 {% tr "Profile" %}</a>
+        <div class="item" style="cursor:default"><div class="row between">🌐 <span style="flex:1">{% tr "Language" %}</span>
+          <form method="post" action="{% url 'set_language' %}" class="seg" style="padding:2px">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button name="language" value="bn" class="lgbtn {% if user.language == 'bn' %}on{% endif %}">বাংলা</button><button name="language" value="en" class="lgbtn {% if user.language == 'en' %}on{% endif %}">English</button></form></div></div>
+        <a class="item" href="{% url 'about' %}">ℹ️ {% tr "About us" %}</a><hr>
+        {% if user.is_paid %}<div class="msg sm" style="margin:0 0 6px"><b>{{ user.plan|title }} {% tr "plan" %}</b> · {% tr "until" %} {{ user.paid_until|date:"j M Y" }}</div>
+        {% else %}<div class="msg sm" style="margin:0 0 6px"><b>{% tr "Free trial" %}</b> · {{ user.trial_days_left }} {% tr "of" %} {{ TRIAL_DAYS }} {% tr "days left" %}
+          <div class="bar {% if user.trial_days_left < 4 %}danger{% endif %}"><i style="width:{% widthratio user.trial_days_left TRIAL_DAYS 100 %}%"></i></div></div>{% endif %}
+        <a class="item" href="{% url 'subscription' %}">💳 {% tr "Subscription" %}</a>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="item">{% tr "Log out" %}</button></form></div></details>
+  </div>
+</div></header>
+<main class="container">
+  {% block header %}<div class="top"><h1>{% block heading %}{% endblock %}</h1><p class="muted" style="margin-top:4px">{% block sub %}{% endblock %}</p></div>{% endblock %}
+  {% if not user.has_access %}<div class="notice" style="margin-bottom:16px"><b>{% tr "Your free trial has ended." %}</b> {% tr "Your records are safe, but AI features are paused." %} <a href="{% url 'subscription' %}" class="link" style="text-decoration:underline">{% tr "Choose a plan" %}</a></div>{% endif %}
+  {% if messages %}<div class="msgs">{% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+{% include "core/_footer.html" %}
 {% endblock %}
 <script src="{% static 'core/js/app.js' %}"></script>
 {% block scripts %}{% endblock %}

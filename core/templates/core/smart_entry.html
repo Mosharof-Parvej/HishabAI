@@ -35,7 +35,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const today = "{{ today|date:'Y-m-d' }}";
 const showErr = m => { $("err").textContent = m || ""; $("err").style.display = m ? "block" : "none"; };
-const catOpts = (kind, sel) => CATS.filter(c => c.kind === kind).map(c => `<option ${c.name === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+const catOpts = (kind, sel) => CATS.filter(c => c.kind === kind).map(c => `<option value="${esc(c.name)}" ${c.name === sel ? "selected" : ""}>${esc((c.emoji ? c.emoji + " " : "") + c.name)}</option>`).join("");
 
 function addRow(t) {
   const tr = document.createElement("tr");
@@ -46,7 +46,7 @@ function addRow(t) {
     <td><select class="k" style="width:105px"><option value="expense" ${t.type==="expense"?"selected":""}>Expense</option><option value="income" ${t.type==="income"?"selected":""}>Income</option><option value="borrowed" ${t.type==="borrowed"?"selected":""}>I borrowed</option><option value="lent" ${t.type==="lent"?"selected":""}>I lent</option></select></td>
     <td><input class="a" type="number" min="0.01" step="0.01" value="${esc(t.amount)}" style="width:110px"></td>
     <td><select class="c" style="width:150px">${catOpts(t.type, t.category)}</select><span class="dueb" style="display:none"><input class="due" type="date" title="Repay by (optional)" value="${esc(t.due_date || "")}" style="width:150px"><select class="rem" title="Remind me" style="width:150px;margin-top:4px"><option value="3">🔔 3 days before</option><option value="0">🔔 On the due date</option><option value="1">🔔 1 day before</option><option value="7">🔔 7 days before</option><option value="">No reminder</option></select></span></td>
-    <td><select class="ac" style="width:130px">${acctOpts(t.account || ACCTS[0])}</select></td>
+    <td><select class="ac" style="width:130px">${acctOpts(t.account || (ACCTS.includes("Cash") ? "Cash" : ACCTS[0]))}</select></td>
     <td><input class="d" type="date" max="${today}" value="${esc(t.date || today)}" style="width:140px"></td>
     <td><input class="n" value="${esc(t.note)}" maxlength="200"></td>
     <td><button class="btn sm danger x" type="button">✕</button></td>`;

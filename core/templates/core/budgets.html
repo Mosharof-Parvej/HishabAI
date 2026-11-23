@@ -1,7 +1,7 @@
 {% extends "core/base.html" %}{% load ui %}
-{% block title %}Budgets & Reports{% endblock %}
-{% block heading %}Budgets &amp; Reports{% endblock %}
-{% block sub %}Set monthly limits and review where your money goes{% endblock %}
+{% block title %}Categories & Budgets{% endblock %}
+{% block heading %}Categories &amp; Budgets{% endblock %}
+{% block sub %}Set monthly limits, manage categories and review where your money goes{% endblock %}
 {% block content %}
 <div class="row between wrap" style="margin-bottom:16px">
   <form class="row" method="get"><select name="month" onchange="this.form.submit()" style="width:170px">
@@ -12,7 +12,7 @@
 </div>
 <div class="grid g2e" style="margin-bottom:16px">
   <div class="card"><div class="row between"><h3>{% if yearly %}Yearly{% else %}Monthly{% endif %} Budgets</h3><a href="#edit" class="income sm no-print"><b>+ Edit budgets</b></a></div>
-    {% for b in status %}<div class="budget-row"><div class="row between"><b>{{ b.category.name }}</b><span class="sm muted">{{ b.spent|taka }} / {{ b.limit|taka }}</span></div>
+    {% for b in status %}<div class="budget-row"><div class="row between"><b>{{ b.category.label }}</b><span class="sm muted">{{ b.spent|taka }} / {{ b.limit|taka }}</span></div>
       <div class="bar {% if b.level == 'danger' %}danger{% elif b.level == 'warn' %}warn{% endif %}"><i style="width:{{ b.pct|pct_cap }}%"></i></div>
       <div class="row between sm"><span class="muted">{% if b.left >= 0 %}{{ b.left|taka }} left{% else %}Over by {{ b.left|taka }}{% endif %}</span><b class="{% if b.level == 'ok' %}income{% elif b.level == 'danger' %}expense{% endif %}">{{ b.pct }}%</b></div></div>
     {% empty %}<p class="muted">No budgets yet. Set limits below to get alerts.</p>{% endfor %}</div>
@@ -24,7 +24,7 @@
     <p style="margin-top:12px"><button class="btn outline sm" id="tipbtn">Generate suggestions</button></p></div>
   <div class="card"><h3>Category Breakdown</h3>
     <table><thead><tr><th>Category</th><th class="right">Amount</th><th>Share</th><th class="right">vs prev month</th></tr></thead>
-    {% for c in cats %}<tr><td><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.name }}</span></td><td class="right"><b>{{ c.total|taka }}</b></td>
+    {% for c in cats %}<tr><td><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.emoji }} {{ c.name }}</span></td><td class="right"><b>{{ c.total|taka }}</b></td>
       <td><div class="bar" style="width:70px;display:inline-block;margin:0"><i style="width:{{ c.share }}%;background:{{ c.color }}"></i></div> <span class="sm muted">{{ c.share }}%</span></td>
       <td class="right sm">{% if c.vs is None %}<span class="muted">—</span>{% elif c.vs > 0 %}<b class="expense">▲ {{ c.vs }}%</b>{% elif c.vs < 0 %}<b class="income">▼ {{ c.vs|stringformat:"d"|cut:"-" }}%</b>{% else %}<span class="muted">0%</span>{% endif %}</td></tr>
     {% empty %}<tr><td colspan="4" class="muted">No expenses in this period.</td></tr>{% endfor %}</table></div>
@@ -32,17 +32,25 @@
 <div class="card no-print" id="edit" style="margin-top:16px"><h3>Edit monthly budgets <span class="muted sm">(leave empty for no limit)</span></h3>
   <form method="post" action="{% url 'budgets_save' %}">{% csrf_token %}
     <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
-      {% for e in expense_cats %}<div><label>{{ e.c.name }}</label><input type="number" min="0" step="1" name="limit_{{ e.c.id }}" value="{{ e.limit|default_if_none:''|stringformat:'s'|cut:'.00' }}" placeholder="৳ per month"></div>{% endfor %}
+      {% for e in expense_cats %}<div><label>{{ e.c.label }}</label><input type="number" min="0" step="1" name="limit_{{ e.c.id }}" value="{{ e.limit|default_if_none:''|stringformat:'s'|cut:'.00' }}" placeholder="৳ per month"></div>{% endfor %}
     </div><p style="margin-top:14px"><button class="btn primary">Save budgets</button></p></form></div>
+<div class="card no-print" style="margin-top:16px"><h3>Categories</h3>
+  <div class="chips" style="margin-bottom:14px">{% for c in all_cats %}<span class="btn sm" style="cursor:default"><i class="dot" style="background:{{ c.color }}"></i>{{ c.label }} <span class="muted">· {{ c.kind }}</span></span>{% endfor %}</div>
+  <form method="post" action="{% url 'categories_add' %}" class="row wrap" style="align-items:flex-end">{% csrf_token %}
+    <div style="width:80px"><label>Emoji</label><input name="emoji" maxlength="8" placeholder="🎁" style="text-align:center"></div>
+    <div style="flex:1;min-width:180px"><label>New category</label><input name="name" maxlength="40" required placeholder="e.g. Pets"></div>
+    <div style="width:140px"><label>Type</label><select name="kind"><option value="expense">Expense</option><option value="income">Income</option></select></div>
+    <button class="btn primary">Add category</button></form></div>
 {{ daily|json_script:"daily-data" }}
 {% endblock %}
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
+Chart.defaults.color = "#a1a1aa";
 const D = JSON.parse(document.getElementById("daily-data").textContent);
 new Chart(document.getElementById("daily"), {type:"line",
-  data:{labels:D.map((_, i) => i + 1),datasets:[{data:D,borderColor:"#059669",backgroundColor:"#05966922",fill:true,tension:.3,pointRadius:2}]},
-  options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c => taka(c.parsed.y)}}},scales:{y:{grid:{color:"#F1F5F9"},beginAtZero:true},x:{grid:{display:false}}}}});
+  data:{labels:D.map((_, i) => i + 1),datasets:[{data:D,borderColor:"#4ade80",backgroundColor:"#4ade8022",fill:true,tension:.3,pointRadius:2}]},
+  options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c => taka(c.parsed.y)}}},scales:{y:{grid:{color:"#27272c"},beginAtZero:true},x:{grid:{display:false}}}}});
 document.getElementById("tipbtn").onclick = async e => {
   const b = e.target, box = document.getElementById("tips"); b.disabled = true; box.textContent = "Thinking…";
   try { const d = await api("{% url 'api_budget_suggestions' %}"); box.innerHTML = ""; const ul = document.createElement("ul"); ul.style.cssText = "margin:0;padding-left:18px;display:grid;gap:8px;color:var(--text)";

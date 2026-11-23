@@ -6,19 +6,23 @@ from django.db import models
 from django.utils import timezone
 
 DEFAULT_CATEGORIES = [
-    # (name, kind, color)
-    ("Food", "expense", "#059669"),
-    ("Bills & Utilities", "expense", "#F59E0B"),
-    ("Education", "expense", "#8B5CF6"),
-    ("Transport", "expense", "#EAB308"),
-    ("Shopping", "expense", "#EC4899"),
-    ("Health", "expense", "#0EA5E9"),
-    ("Entertainment", "expense", "#F97316"),
-    ("Others", "expense", "#94A3B8"),
-    ("Salary", "income", "#059669"),
-    ("Tuition", "income", "#0EA5E9"),
-    ("Business", "income", "#8B5CF6"),
-    ("Other Income", "income", "#94A3B8"),
+    # (name, kind, colour, emoji)  - "Others" / "Other Income" must stay the catch-alls for the AI
+    ("Food", "expense", "#22C55E", "🍚"),
+    ("Rent", "expense", "#8B5CF6", "🏠"),
+    ("Bills & Utilities", "expense", "#F59E0B", "🧾"),
+    ("Mobile & Internet", "expense", "#06B6D4", "📱"),
+    ("Education", "expense", "#6366F1", "🎓"),
+    ("Transport", "expense", "#0EA5E9", "🚌"),
+    ("Shopping", "expense", "#EC4899", "🛍️"),
+    ("Health", "expense", "#EF4444", "🏥"),
+    ("Family", "expense", "#14B8A6", "👪"),
+    ("Gift", "expense", "#D97706", "🎁"),
+    ("Entertainment", "expense", "#F97316", "🎬"),
+    ("Others", "expense", "#94A3B8", "🏷️"),
+    ("Salary", "income", "#22C55E", "💼"),
+    ("Tuition", "income", "#0EA5E9", "📚"),
+    ("Business", "income", "#8B5CF6", "🏪"),
+    ("Other Income", "income", "#94A3B8", "💰"),
 ]
 
 
@@ -92,7 +96,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def seed_defaults(self):
         Category.objects.bulk_create(
-            [Category(user=self, name=n, kind=k, color=c) for n, k, c in DEFAULT_CATEGORIES],
+            [Category(user=self, name=n, kind=k, color=c, emoji=e) for n, k, c, e in DEFAULT_CATEGORIES],
             ignore_conflicts=True,
         )
         for name, kind, provider in DEFAULT_ACCOUNTS:
@@ -104,6 +108,7 @@ class Category(models.Model):
     name = models.CharField(max_length=40)
     kind = models.CharField(max_length=7, choices=[("expense", "Expense"), ("income", "Income")])
     color = models.CharField(max_length=7, default="#94A3B8")
+    emoji = models.CharField(max_length=8, blank=True, default="")
 
     class Meta:
         unique_together = [("user", "name")]
@@ -112,6 +117,10 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def label(self):
+        return f"{self.emoji} {self.name}".strip()
 
 
 class Account(models.Model):

@@ -7,7 +7,7 @@
   <form class="row wrap" style="margin-bottom:12px">
     <input name="q" value="{{ f.q }}" placeholder="Search notes" style="width:200px">
     <select name="kind" style="width:130px"><option value="">All types</option><option value="expense" {% if f.kind == 'expense' %}selected{% endif %}>Expense</option><option value="income" {% if f.kind == 'income' %}selected{% endif %}>Income</option></select>
-    <select name="cat" style="width:170px"><option value="">All categories</option>{% for c in cats %}<option value="{{ c.id }}" {% if f.cat == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <select name="cat" style="width:170px"><option value="">All categories</option>{% for c in cats %}<option value="{{ c.id }}" {% if f.cat == c.id|stringformat:"s" %}selected{% endif %}>{{ c.label }}</option>{% endfor %}</select>
     <select name="acc" style="width:150px"><option value="">All accounts</option>{% for a in accts %}<option value="{{ a.id }}" {% if f.acc == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select>
     <label class="row sm" style="margin:0;font-weight:500">From <input type="date" name="from" value="{{ f.from }}" style="width:150px"></label>
     <label class="row sm" style="margin:0;font-weight:500">To <input type="date" name="to" value="{{ f.to }}" style="width:150px"></label>
@@ -24,7 +24,7 @@
     {% for t in page %}<tr>
       <td class="muted">{{ t.date|date:"j M Y" }}</td>
       <td>{{ t.note|default:"—" }}{% if t.ai_generated %} <span class="tag">AI</span>{% endif %}</td>
-      <td><span class="row"><i class="dot" style="background:{{ t.category.color|default:'#94A3B8' }}"></i>{{ t.category.name|default:"—" }}</span></td>
+      <td><span class="row"><i class="dot" style="background:{{ t.category.color|default:'#94A3B8' }}"></i>{{ t.category.label|default:"—" }}</span></td>
       <td>{% if t.account %}<span class="row">{% include "core/_logo.html" with a=t.account cls="sm" %}{{ t.account.name }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="right"><b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka:2 }}</b></td>
       <td class="right"><form method="post" action="{% url 'transaction_delete' t.pk %}" onsubmit="return confirm('Delete this transaction?')">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn sm danger">Delete</button></form></td>

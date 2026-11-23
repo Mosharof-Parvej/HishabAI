@@ -1,0 +1,2 @@
+{% load ui %}<footer class="foot">{% if SITE_AUTHOR %}{% tr "Made by" %} <b>{{ SITE_AUTHOR }}</b> <span>·</span>{% endif %}
+  <a href="{% url 'help' %}">{% tr "Help" %}</a>·<a href="{% url 'about' %}">{% tr "About us" %}</a>·<a href="{% url 'privacy' %}">{% tr "Privacy" %}</a></footer>

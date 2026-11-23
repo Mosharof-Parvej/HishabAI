@@ -34,12 +34,12 @@ def totals(user, first, last):
 def category_spend(user, first, last):
     rows = (
         Transaction.objects.filter(user=user, kind="expense", date__range=(first, last))
-        .values("category__id", "category__name", "category__color")
+        .values("category__id", "category__name", "category__color", "category__emoji")
         .annotate(total=Sum("amount"))
         .order_by("-total")
     )
     return [
-        {"id": r["category__id"], "name": r["category__name"] or "Uncategorized",
+        {"id": r["category__id"], "name": r["category__name"] or "Uncategorized", "emoji": r["category__emoji"] or "🏷️",
          "color": r["category__color"] or "#94A3B8", "total": r["total"]}
         for r in rows
     ]
@@ -62,6 +62,21 @@ def monthly_series(user, end_month, n=6):
         m = shift_month(start, i)
         out.append({"label": m.strftime("%b"), "income": float(data[m]["income"]), "expense": float(data[m]["expense"])})
     return out
+
+
+def all_time_balance(user):
+    agg = {r["kind"]: r["s"] for r in Transaction.objects.filter(user=user).values("kind").annotate(s=Sum("amount"))}
+    return agg.get("income", ZERO) - agg.get("expense", ZERO)
+
+
+def daily_series(user, first, last):
+    """Per-day expense and income lists for first..last (inclusive)."""
+    rows = (Transaction.objects.filter(user=user, date__range=(first, last)).annotate(d=TruncDay("date"))
+            .values("d", "kind").annotate(s=Sum("amount")))
+    by = {(r["d"], r["kind"]): float(r["s"]) for r in rows}
+    days = [first + timedelta(days=i) for i in range((last - first).days + 1)]
+    return {"labels": [f"{d.day:02d}" for d in days], "expense": [by.get((d, "expense"), 0.0) for d in days],
+            "income": [by.get((d, "income"), 0.0) for d in days]}
 
 
 def daily_spending(user, first, last):

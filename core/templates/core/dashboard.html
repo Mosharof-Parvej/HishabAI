@@ -1,62 +1,78 @@
 {% extends "core/base.html" %}{% load ui %}
 {% block title %}Dashboard{% endblock %}
-{% block heading %}Dashboard{% endblock %}
-{% block sub %}{{ today|date:"l, j F Y" }} · Welcome back, {{ user.display_name }}{% endblock %}
+{% block heading %}{{ greeting }}, {{ user.display_name }}{% endblock %}
+{% block sub %}{{ today|date:"l, j F" }}{% endblock %}
 {% block content %}
-<form class="aibar" action="{% url 'smart_entry' %}">
-  <span class="spark">✦</span>
-  <input name="text" placeholder="Tell AI what you spent or earned… e.g. “Lunch 250 tk, rickshaw 60 tk”" required>
-  <button class="btn primary" type="submit">Add with AI</button>
-  <a class="btn" href="{% url 'transaction_add' %}">+ Add manually</a>
+<form class="aicard" action="{% url 'smart_entry' %}" id="aiform">
+  <h2>{% tr "Tell me what you spent or earned — বাংলা, English, Banglish or any language" %}</h2>
+  <div class="taw"><textarea name="text" id="aitext" maxlength="2000" placeholder="e.g. আজ বাজারে ৫৫০ টাকা খরচ, paid rent 12000, tuition theke 6000 pelam" required></textarea>
+    <div class="micwrap"><button type="button" id="mic">🎤</button></div></div>
+  <div class="examples">
+    <button type="button">আজ বাজারে ৫৫০, রিকশা ৮০</button><button type="button">gotokal lunch 250, recharge 100</button>
+    <button type="button">salary 35000, rent 12000</button><button type="button">Rahim ke 500 taka dhar dilam</button></div>
+  <div class="ai-foot">{% include "core/_ai_meter.html" %}
+    <div class="row"><a class="btn" href="{% url 'transaction_add' %}">{% tr "Add manually" %}</a><button class="btn primary">{% tr "Add with AI" %}</button></div></div>
 </form>
-<div style="margin:-6px 0 14px">{% include "core/_ai_meter.html" %}</div>
-<div class="grid g4" style="margin-bottom:16px">
-  <div class="card stat"><div class="lbl">Total Income <span class="chip g">+</span></div><div class="val">{{ cur.income|taka }}</div>
-    {% if income_change is not None %}<span class="sm {% if income_change >= 0 %}income{% else %}expense{% endif %}">{{ income_change|stringformat:"+d" }}% vs last month</span>{% else %}<span class="sm muted">This month</span>{% endif %}</div>
-  <div class="card stat"><div class="lbl">Total Expense <span class="chip r">−</span></div><div class="val">{{ cur.expense|taka }}</div>
-    {% if expense_change is not None %}<span class="sm {% if expense_change <= 0 %}income{% else %}expense{% endif %}">{{ expense_change|stringformat:"+d" }}% vs last month</span>{% else %}<span class="sm muted">This month</span>{% endif %}</div>
-  <div class="card stat"><div class="lbl">Balance <span class="chip b">৳</span></div><div class="val">{{ cur.balance|taka }}</div><span class="sm muted">Available this month</span></div>
-  <div class="card stat"><div class="lbl">Savings Rate <span class="chip y">%</span></div><div class="val">{{ cur.savings_rate }}%</div><span class="sm muted">Goal 30%</span></div>
+
+<div class="monthbar"><h2>{{ month|date:"F Y" }}</h2>
+  <div class="stepper"><a href="?month={{ prev_month|date:'Y-m' }}">{% tr "← Prev" %}</a><a href="?month={{ next_month|date:'Y-m' }}" class="{% if is_current %}off{% endif %}">{% tr "Next →" %}</a></div></div>
+<div class="grid g4" style="margin-bottom:6px">
+  <div class="card stat"><div class="lbl">{% tr "Income" %}</div><div class="val income">{{ cur.income|taka:2 }}</div></div>
+  <div class="card stat"><div class="lbl">{% tr "Expense" %}</div><div class="val expense">{{ cur.expense|taka:2 }}</div></div>
+  <div class="card stat"><div class="lbl">{% tr "Balance this month" %}</div><div class="val {% if cur.balance < 0 %}expense{% else %}income{% endif %}">{{ cur.balance|taka:2 }}</div>
+    {% if saved_pct is not None %}<span class="sm muted">{% if saved_pct >= 0 %}{% tr "Saved" %}{% else %}{% tr "Overspent" %}{% endif %} {{ saved_pct|stringformat:".1f"|cut:"-" }}% {% tr "of income" %}</span>{% endif %}</div>
+  <div class="card stat"><div class="lbl">{% tr "All-time balance" %}</div><div class="val {% if all_time < 0 %}expense{% else %}income{% endif %}">{{ all_time|taka:2 }}</div></div>
 </div>
-<div class="grid g2" style="margin-bottom:16px">
-  <div class="card"><h3>Income vs Expense <span class="muted sm">· Last 6 months</span></h3><div class="chart-box"><canvas id="bars"></canvas></div></div>
-  <div class="card"><h3>Spending by Category</h3>
-    {% if cats %}<div class="row"><div style="width:130px;height:130px;position:relative"><canvas id="donut"></canvas></div>
-    <div style="flex:1">{% for c in cats %}<div class="row between sm" style="padding:3px 0"><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.name }}</span><b>{{ c.share }}%</b></div>{% endfor %}</div></div>
-    {% else %}<p class="muted">No expenses yet this month.</p>{% endif %}</div>
+
+<div class="sect"><span>{% tr "Accounts" %}</span><a class="link" href="{% url 'accounts' %}">{% tr "Manage" %}</a></div>
+<div class="strip">{% for a, bal in accounts %}<a class="acc" href="{% url 'transactions' %}?acc={{ a.pk }}">{% include "core/_logo.html" with a=a %}<div><b>{{ a.name }}</b><span {% if bal < 0 %}class="expense"{% endif %}>{{ bal|taka:2 }}</span></div></a>{% endfor %}</div>
+
+<div class="debtbar"><span>{% tr "Debts" %}</span><span class="row" style="gap:18px;font-weight:500"><span>{% tr "Owed to me" %} <b class="income">{{ debt_totals.owed|taka:2 }}</b></span><span>{% tr "I owe" %} <b class="expense">{{ debt_totals.owe|taka:2 }}</b></span><a class="link" href="{% url 'debts' %}">{% tr "Manage" %}</a></span></div>
+
+<div class="cols">
+  <div class="card"><h3 style="color:var(--text)">{% tr "Where your money went" %}</h3>
+    {% if cats %}<div style="width:260px;height:260px;margin:6px auto 14px"><canvas id="donut"></canvas></div>
+    {% for c in cats %}<div class="catrow"><i class="dot" style="background:{{ c.color }}"></i><span class="nm">{{ c.emoji }} {{ c.name }}</span><span class="pc">{{ c.share|stringformat:".1f" }}%</span><b class="am">{{ c.total|taka:2 }}</b></div>{% endfor %}
+    {% else %}<p class="muted" style="padding:24px 0">{% tr "No expenses yet this month." %}</p>{% endif %}</div>
+  <div class="stack">
+    <div class="card"><h3 style="color:var(--text)">{% tr "Day by day" %}</h3><div class="chart-box" style="height:250px"><canvas id="daily"></canvas></div></div>
+    <div class="card"><div class="row between"><h3 style="color:var(--text);margin:0">{% tr "Budgets" %}</h3><a class="link sm" href="{% url 'budgets' %}#edit">{% tr "Set budgets" %}</a></div>
+      <div style="margin-top:12px">{% for b in budgets %}<div class="budget-row"><div class="row between"><span>{{ b.category.label }}</span><span class="sm">{{ b.spent|taka:2 }} / {{ b.limit|taka:2 }}</span></div>
+        <div class="bar white {% if b.level == 'danger' %}danger{% elif b.level == 'warn' %}warn{% endif %}"><i style="width:{{ b.pct|pct_cap }}%"></i></div></div>
+        {% empty %}<p class="muted sm">{% tr "No budgets yet — set a monthly limit per category." %}</p>{% endfor %}</div></div>
+    <div class="card insight"><h3 style="color:var(--primary)"><span class="spark">✦</span> {% tr "AI insight" %}</h3><p id="insight" class="muted">{% tr "Analysing your spending…" %}</p></div>
+  </div>
 </div>
-<div class="grid g2e" style="margin-bottom:16px">
-  <div class="card"><div class="row between"><h3>Accounts <span class="muted sm">· {{ accounts_total|taka }}</span></h3><a class="income sm" href="{% url 'accounts' %}"><b>Manage →</b></a></div>
-    {% for a, bal in accounts %}<div class="tx">{% include "core/_logo.html" with a=a %}<div class="grow"><b>{{ a.name }}</b><div class="sm muted">{{ a.get_kind_display }}</div></div><b {% if bal < 0 %}class="expense"{% endif %}>{{ bal|taka }}</b></div>{% endfor %}</div>
-  <div class="card"><div class="row between"><h3>Debts</h3><a class="income sm" href="{% url 'debts' %}"><b>Manage →</b></a></div>
-    <div class="row between" style="padding:8px 0"><span class="muted">You owe</span><b class="expense">{{ debt_totals.owe|taka }}</b></div>
-    <div class="row between" style="padding:8px 0"><span class="muted">Owed to you</span><b class="income">{{ debt_totals.owed|taka }}</b></div>
-    {% for r in reminders|slice:":3" %}<div class="rem"><span><b>{{ r.debt.person }}</b> <span class="sm muted">{{ r.remaining|taka }}</span></span><span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days < 0 %}overdue{% elif r.days == 0 %}today{% else %}in {{ r.days }}d{% endif %}</span></div>{% endfor %}</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="row between wrap"><div><h3 style="color:var(--text);margin:0">{% tr "Recent transactions" %}</h3>
+    <div class="sm muted">{% if range == 'day' %}{{ today|date:"j M Y" }}{% else %}{{ range_start|date:"j M" }} – {{ today|date:"j M Y" }}{% endif %}</div></div>
+    <div class="row"><a class="link" href="{% url 'transactions' %}">{% tr "See all" %}</a>
+      <div class="seg"><a href="?month={{ month|date:'Y-m' }}&range=day" class="{% if range == 'day' %}on{% endif %}">{% tr "Day" %}</a><a href="?month={{ month|date:'Y-m' }}&range=week" class="{% if range == 'week' %}on{% endif %}">{% tr "Week" %}</a><a href="?month={{ month|date:'Y-m' }}&range=month" class="{% if range == 'month' %}on{% endif %}">{% tr "Month" %}</a></div></div></div>
+  <div style="margin-top:8px">{% for t in recent %}<div class="tx"><span class="ic">{{ t.category.emoji|default:"🏷️" }}</span>
+    <div class="grow"><b>{{ t.note|default:t.category.name }}</b>{% if t.ai_generated %} <span class="tag">AI</span>{% endif %}<div class="sm muted">{{ t.category.name|default:"—" }}{% if t.account %} · {{ t.account.name }}{% endif %} · {{ t.date|date:"j M" }}</div></div>
+    <b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka:2 }}</b></div>
+    {% empty %}<p class="muted" style="text-align:center;padding:26px 0">{% tr "No transactions in this period." %}</p>{% endfor %}</div>
 </div>
-<div class="grid g2e">
-  <div class="card"><div class="row between"><h3>Recent Transactions</h3><a class="income sm" href="{% url 'transactions' %}"><b>View all →</b></a></div>
-    {% for t in recent %}<div class="tx"><span class="ic" style="background:{{ t.category.color|default:'#94A3B8' }}22;color:{{ t.category.color|default:'#64748B' }}">{{ t.category.name|default:"?"|slice:":1" }}</span>
-      <div class="grow"><b>{{ t.note|default:t.category.name }}</b>{% if t.ai_generated %} <span class="tag">AI</span>{% endif %}<div class="sm muted">{{ t.category.name }} · {{ t.date|date:"j M" }}</div></div>
-      <b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka }}</b></div>
-    {% empty %}<p class="muted">Nothing yet — try the AI bar above.</p>{% endfor %}</div>
-  <div class="card insight"><h3><span class="spark">✦</span> AI Insight</h3><p id="insight" class="muted">Analysing your spending…</p>
-    <p style="margin-top:12px"><a class="income" href="{% url 'ask' %}"><b>Ask AskHishabAI →</b></a></p></div>
-</div>
-{{ series|json_script:"series-data" }}{{ donut|json_script:"donut-data" }}
+{{ daily|json_script:"daily-data" }}{{ donut|json_script:"donut-data" }}
 {% endblock %}
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-const S = JSON.parse(document.getElementById("series-data").textContent);
-new Chart(document.getElementById("bars"), {type:"bar",
-  data:{labels:S.map(x=>x.label),datasets:[{label:"Income",data:S.map(x=>x.income),backgroundColor:"#059669",borderRadius:4},{label:"Expense",data:S.map(x=>x.expense),backgroundColor:"#FB7185",borderRadius:4}]},
-  options:{maintainAspectRatio:false,plugins:{legend:{position:"top",align:"end"}},scales:{y:{grid:{color:"#F1F5F9"},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false}}}}});
-const D = JSON.parse(document.getElementById("donut-data").textContent);
-if (D.values.length) new Chart(document.getElementById("donut"), {type:"doughnut",
-  data:{labels:D.labels,datasets:[{data:D.values,backgroundColor:D.colors,borderWidth:0}]},
-  options:{cutout:"68%",plugins:{legend:{display:false}}}});
+Chart.defaults.color = "#a1a1aa"; Chart.defaults.font.family = "Inter, sans-serif";
+const D = JSON.parse(document.getElementById("daily-data").textContent);
+new Chart(document.getElementById("daily"), {type:"bar",
+  data:{labels:D.labels,datasets:[{label:"{% tr 'Expense' %}",data:D.expense,backgroundColor:"#fb923c",borderRadius:3},{label:"{% tr 'Income' %}",data:D.income,backgroundColor:"#4ade80",borderRadius:3}]},
+  options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}}},scales:{y:{grid:{color:"#27272c"},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false},ticks:{maxTicksLimit:15}}}}});
+const P = JSON.parse(document.getElementById("donut-data").textContent);
+if (P.values.length) new Chart(document.getElementById("donut"), {type:"doughnut",
+  data:{labels:P.labels,datasets:[{data:P.values,backgroundColor:P.colors,borderColor:"#161619",borderWidth:2}]},
+  options:{cutout:"62%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c => " " + c.label + ": " + taka(c.parsed)}}}}});
+const ta = document.getElementById("aitext");
+document.querySelectorAll(".examples button").forEach(b => b.onclick = () => { ta.value = b.textContent; ta.focus(); });
+ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && ta.value.trim()) { e.preventDefault(); document.getElementById("aiform").submit(); } });
+voice(document.getElementById("mic"), ta);
 const box = document.getElementById("insight");
-api("{% url 'api_insight' %}").then(d => box.textContent = d.text || "Add a few transactions and I'll share insights here.")
-  .catch(e => box.textContent = e.message);
+api("{% url 'api_insight' %}").then(d => box.textContent = d.text || "{% tr "Add a few transactions and I'll share insights here." %}").catch(e => box.textContent = e.message);
 </script>
 {% endblock %}

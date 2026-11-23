@@ -5,6 +5,14 @@ from django import template
 register = template.Library()
 
 
+@register.simple_tag
+def tr(text):
+    """{% tr "Dashboard" %} -> the Bangla text when the user's language is Bangla."""
+    from ..i18n import tr as _tr
+
+    return _tr(text)
+
+
 def _group_bd(n):
     """Bangladeshi digit grouping: 1,00,000."""
     s = str(n)

@@ -197,7 +197,9 @@ def extract_transactions(user, text, categories, accounts=()):
                 continue
             cat = None if is_debt else t.get("category")
             if not is_debt and cat not in categories[kind]:
-                cat = categories[kind][-1]  # "Others"
+                cat = "Others" if kind == "expense" else "Other Income"
+                if cat not in categories[kind]:
+                    cat = categories[kind][-1]
             try:
                 d = datetime.strptime(str(t.get("date")), "%Y-%m-%d").date()
             except ValueError:

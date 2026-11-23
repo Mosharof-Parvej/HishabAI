@@ -1,0 +1,13 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}About us{% endblock %}
+{% block heading %}{% tr "About us" %}{% endblock %}
+{% block sub %}Daffodil International University (DIU){% endblock %}
+{% block content %}
+<div class="card prose">
+  <h2 style="margin-top:0">Team</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))">
+    {% for name in team %}<div class="tx" style="border:1px solid var(--line);border-radius:14px;padding:14px"><span class="avatar">{{ name|slice:"4:5" }}</span><div class="grow"><b>{{ name }}</b></div></div>{% endfor %}
+  </div>
+  <p class="muted" style="margin-top:18px">Daffodil International University (DIU)</p>
+</div>
+{% endblock %}

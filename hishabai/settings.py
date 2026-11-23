@@ -39,6 +39,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.UserLanguageMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -80,7 +81,7 @@ LOGIN_REDIRECT_URL = "dashboard"
 
 LANGUAGE_CODE = "en"
 TIME_ZONE = "Asia/Dhaka"
-USE_I18N = False
+USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
@@ -102,6 +103,7 @@ PLANS = {
 }
 # Real payment gateways (bKash/Nagad/SSLCommerz) are not wired yet. While this is
 # True, choosing a plan activates it immediately so the flow can be demoed.
+SITE_AUTHOR = os.environ.get("SITE_AUTHOR", "")  # optional footer credit; the team is credited on the About us page
 PAYMENTS_DEMO_MODE = os.environ.get("PAYMENTS_DEMO_MODE", "1") == "1"
 
 AI_PRIMARY = os.environ.get("AI_PRIMARY", "gemini")

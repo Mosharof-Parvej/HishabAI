@@ -1,17 +1,18 @@
 {% extends "core/base.html" %}
-{% block title %}Settings{% endblock %}
-{% block heading %}Settings{% endblock %}
-{% block sub %}Your profile and data{% endblock %}
+{% load ui %}
+{% block title %}Profile{% endblock %}
+{% block heading %}{% tr "Profile" %}{% endblock %}
+{% block sub %}{% tr "Your profile and data" %}{% endblock %}
 {% block content %}
 <div class="grid g2e">
-  <div class="card"><h3>Profile</h3><form method="post">{% csrf_token %}
-    <div class="field"><label>Email</label><input value="{{ user.email }}" disabled></div>
-    <div class="field"><label>Name</label><input name="name" value="{{ user.name }}" maxlength="80"></div>
-    <div class="field"><label>AI reply language</label><select name="language"><option value="en" {% if user.language == 'en' %}selected{% endif %}>English</option><option value="bn" {% if user.language == 'bn' %}selected{% endif %}>বাংলা</option></select></div>
-    <button class="btn primary">Save</button></form></div>
+  <div class="card"><h3>{% tr "Profile" %}</h3><form method="post">{% csrf_token %}
+    <div class="field"><label>{% tr "Email" %}</label><input value="{{ user.email }}" disabled></div>
+    <div class="field"><label>{% tr "Name" %}</label><input name="name" value="{{ user.name }}" maxlength="80"></div>
+    <div class="field"><label>{% tr "Language for the app and AI replies" %}</label><select name="language"><option value="en" {% if user.language == 'en' %}selected{% endif %}>English</option><option value="bn" {% if user.language == 'bn' %}selected{% endif %}>বাংলা</option></select></div>
+    <button class="btn primary">{% tr "Save" %}</button></form></div>
   <div class="grid" style="align-content:start">
-    <div class="card"><h3>Your data</h3><p class="sm muted" style="margin-bottom:10px">Download everything you've recorded.</p><a class="btn outline" href="{% url 'transactions_csv' %}">Export all transactions (CSV)</a></div>
-    <div class="card"><h3 class="expense">Delete account</h3><p class="sm muted" style="margin-bottom:10px">Permanently deletes your account and all records. Type your email to confirm.</p>
+    <div class="card"><h3>{% tr "Your data" %}</h3><p class="sm muted" style="margin-bottom:10px">{% tr "Download everything you've recorded." %}</p><a class="btn outline" href="{% url 'transactions_csv' %}">{% tr "Export all transactions (CSV)" %}</a></div>
+    <div class="card"><h3 class="expense">{% tr "Delete account" %}</h3><p class="sm muted" style="margin-bottom:10px">Permanently deletes your account and all records. Type your email to confirm.</p>
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="delete"><div class="field"><input name="confirm" placeholder="{{ user.email }}" autocomplete="off"></div><button class="btn danger">Delete my account</button></form></div>
   </div>
 </div>
