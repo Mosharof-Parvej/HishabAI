@@ -730,7 +730,7 @@ def debt_delete(request, pk):
 def subscription(request):
     return render(request, "core/subscription.html", {
         "nav": "subscription", "plans": settings.PLANS, "payments": PaymentRequest.objects.filter(user=request.user).defer("screenshot")[:10],
-        "has_pending": PaymentRequest.objects.filter(user=request.user, status="pending").exists(), "can_pay": bool(payment_methods())})
+        "has_pending": PaymentRequest.objects.filter(user=request.user, status="pending").exists(), "accounts_missing": not payment_methods()})
 
 
 def payment_methods():
@@ -754,12 +754,17 @@ def payment_methods():
 MAX_SCREENSHOT = 4_000_000  # Vercel rejects request bodies over ~4.5 MB
 
 
-def compress_screenshot(upload):
-    """Verify the upload really is an image and shrink it to a JPEG. Raises ValueError with a user-facing message."""
+def process_proof(upload):
+    """The payment proof: a screenshot (PNG/JPG/WebP, shrunk to a small JPEG) or a PDF (kept as uploaded).
+    Returns (bytes, content_type); raises ValueError with a user-facing message if it is neither."""
     from io import BytesIO
 
     from PIL import Image, ImageOps
 
+    head = upload.read(8)
+    upload.seek(0)
+    if head.startswith(b"%PDF-"):
+        return upload.read(), "application/pdf"
     Image.MAX_IMAGE_PIXELS = 40_000_000  # refuse decompression bombs
     try:
         img = Image.open(upload)
@@ -767,11 +772,11 @@ def compress_screenshot(upload):
         upload.seek(0)
         img = ImageOps.exif_transpose(Image.open(upload)).convert("RGB")
     except Exception:
-        raise ValueError("Please upload the screenshot as a PNG or JPG image.")
+        raise ValueError("Please upload the proof as a PNG, JPG or PDF file.")
     img.thumbnail((1600, 1600))
     out = BytesIO()
     img.save(out, "JPEG", quality=82, optimize=True)
-    return out.getvalue()
+    return out.getvalue(), "image/jpeg"
 
 
 @login_required
@@ -779,13 +784,13 @@ def payment_start(request):
     plan = request.POST.get("plan") or request.GET.get("plan")
     if plan not in settings.PLANS:
         return redirect("subscription")
-    methods = payment_methods()
-    ctx = {"nav": "subscription", "plan_key": plan, "plan": settings.PLANS[plan], "methods": methods, "errors": [],
+    methods = payment_methods()  # accounts to show; the form itself is always available
+    ctx = {"nav": "subscription", "plan_key": plan, "plan": settings.PLANS[plan], "methods": methods, "method_choices": PaymentRequest.METHODS, "errors": [],
            "v": {"name": request.user.name, "email": request.user.email}, "max_mb": MAX_SCREENSHOT // 1_000_000}
     if request.method == "POST":
         p, f, errors = request.POST, request.FILES.get("screenshot"), []
         v = {k: p.get(k, "").strip() for k in ("name", "email", "phone", "sender_number", "transaction_id", "note", "method")}
-        if v["method"] not in {m["key"] for m in methods}:
+        if v["method"] not in dict(PaymentRequest.METHODS):
             errors.append("Choose which account you sent the money to.")
         if not v["name"]:
             errors.append("Enter your name.")
@@ -799,24 +804,48 @@ def payment_start(request):
             errors.append("That transaction ID has already been submitted.")
         if PaymentRequest.objects.filter(user=request.user, status="pending").count() >= settings.PAYMENT_PENDING_LIMIT:
             errors.append("You already have payments waiting for review. Please wait for them to be checked.")
-        shot = None
+        shot = kind = None
         if not f:
-            errors.append("Upload a screenshot of the payment.")
+            errors.append("Upload your payment proof (a screenshot or a PDF).")
         elif f.size > MAX_SCREENSHOT:
-            errors.append(f"The screenshot is too large (max {MAX_SCREENSHOT // 1_000_000} MB).")
+            errors.append(f"The file is too large (max {MAX_SCREENSHOT // 1_000_000} MB).")
         else:
             try:
-                shot = compress_screenshot(f)
+                shot, kind = process_proof(f)
             except ValueError as e:
                 errors.append(str(e))
         if not errors:
             PaymentRequest.objects.create(
                 user=request.user, plan=plan, amount=settings.PLANS[plan]["price"], method=v["method"], name=v["name"][:80], email=v["email"],
-                phone=v["phone"], sender_number=v["sender_number"][:40], transaction_id=v["transaction_id"][:60], note=v["note"][:300], screenshot=shot)
+                phone=v["phone"], sender_number=v["sender_number"][:40], transaction_id=v["transaction_id"][:60], note=v["note"][:300], screenshot=shot, proof_type=kind)
             messages.success(request, "Payment submitted. We will check it and activate your plan — usually within a few hours.")
             return redirect("subscription")
         ctx.update(errors=errors, v=v)
     return render(request, "core/payment.html", ctx)
+
+
+@require_POST
+@login_required
+def subscription_cancel(request):
+    """Unsubscribe: end the paid plan immediately (there is no recurring charge to stop, and no refund)."""
+    if request.user.is_paid:
+        request.user.end_subscription()
+        messages.success(request, "You have unsubscribed. Your records are safe; you can subscribe again any time.")
+    else:
+        messages.error(request, "You don't have an active subscription.")
+    return redirect("subscription")
+
+
+@require_POST
+@login_required
+def payment_cancel(request, pk):
+    """Withdraw a payment request that staff have not reviewed yet."""
+    pay = PaymentRequest.objects.filter(pk=pk, user=request.user, status="pending").first()
+    if pay:
+        pay.status = "cancelled"
+        pay.save(update_fields=["status"])
+        messages.success(request, "Payment request cancelled.")
+    return redirect("subscription")
 
 
 @login_required
@@ -824,9 +853,12 @@ def payment_screenshot(request, pk):
     pay = PaymentRequest.objects.filter(pk=pk).first()
     if not pay or not (pay.user_id == request.user.pk or request.user.is_staff):
         raise Http404
-    resp = HttpResponse(bytes(pay.screenshot), content_type="image/jpeg")
+    resp = HttpResponse(bytes(pay.screenshot), content_type=pay.proof_type)
     resp["Cache-Control"] = "private, max-age=3600"
     resp["X-Content-Type-Options"] = "nosniff"
+    if pay.proof_type == "application/pdf":
+        resp["Content-Disposition"] = f'inline; filename="payment-{pay.pk}.pdf"'
+        resp["Content-Security-Policy"] = "sandbox"  # a PDF can't run anything in our origin
     return resp
 
 

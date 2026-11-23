@@ -475,12 +475,15 @@ class AppTests(TestCase):
         page = self.c.get(reverse("payment_start") + "?plan=yearly")
         self.assertContains(page, "01700000000"); self.assertContains(page, "01800000000-5")      # bKash, Rocket
         self.assertContains(page, "City Bank"); self.assertContains(page, "1234567890")           # bank details
-        self.assertNotContains(page, ">Nagad<")                                                  # not configured -> hidden
+        self.assertEqual([m["key"] for m in page.context["methods"]], ["bkash", "rocket", "bank"])      # unconfigured accounts are not shown
         self.assertContains(page, "৳1,299")
         self.assertRedirects(self.c.get(reverse("payment_start") + "?plan=bogus"), reverse("subscription"))
         self.assertContains(self.c.get(reverse("subscription")), "Take subscription")
         with self.settings(PAYMENT_ACCOUNTS={k: {} for k in self.PAY}):
-            self.assertContains(self.c.get(reverse("subscription")), "haven’t been set up")
+            page = self.c.get(reverse("subscription"))
+            self.assertNotContains(page, "no payment account numbers")                         # normal users do not see the staff hint
+            self.assertNotContains(page, "disabled\" href")                                    # and the buttons still work
+            self.assertContains(page, reverse("payment_start") + "?plan=monthly")
 
     @override_settings(PAYMENT_ACCOUNTS=PAY)
     def test_submit_payment_proof_creates_pending_request_and_compresses_screenshot(self):
@@ -496,7 +499,7 @@ class AppTests(TestCase):
     def test_payment_validation(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
         bad = [dict(screenshot=None), dict(screenshot=SimpleUploadedFile("x.png", b"not an image at all" * 50, content_type="image/png")),
-               dict(phone="abc"), dict(email="nope"), dict(name=""), dict(method="nagad"), dict(method="visa"),
+               dict(phone="abc"), dict(email="nope"), dict(name=""), dict(method="visa"),
                dict(screenshot=SimpleUploadedFile("big.png", b"0" * 4_100_000, content_type="image/png"))]
         for over in bad:
             self.assertContains(self._pay(**over), 'class="msg error"')
@@ -507,6 +510,33 @@ class AppTests(TestCase):
         self.assertContains(self._pay(transaction_id="dup1"), "already been submitted")         # same id twice (any case)
         self._pay(transaction_id="")
         self.assertContains(self._pay(transaction_id="NEW"), "waiting for review")              # pending cap of 3
+
+    @override_settings(PAYMENT_ACCOUNTS={})
+    def test_form_works_even_before_account_numbers_are_configured(self):
+        page = self.c.get(reverse("payment_start") + "?plan=yearly")
+        self.assertEqual(page.status_code, 200)
+        for needle in ['name="phone"', 'name="email"', 'name="transaction_id"', 'type="file"', "Our payment account details will appear here", ".pdf"]:
+            self.assertContains(page, needle)
+        self.assertEqual(len(page.context["method_choices"]), 4)                                  # bKash, Nagad, Rocket, Bank
+        self.assertEqual(self._pay(method="nagad", transaction_id="").status_code, 302)           # submitting works too
+        self.assertEqual(PaymentRequest.objects.get().method, "nagad")
+        staff_page = Client(); staff_page.force_login(User.objects.create_user("s@example.com", "s3cret-pass-9", is_staff=True))
+        self.assertContains(staff_page.get(reverse("subscription")), "no payment account numbers")   # only staff are told to configure them
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_pdf_proof_is_accepted_stored_and_served_safely(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        pdf = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+        self.assertEqual(self._pay(screenshot=SimpleUploadedFile("receipt.pdf", pdf, content_type="application/pdf")).status_code, 302)
+        p = PaymentRequest.objects.get()
+        self.assertEqual((p.proof_type, bytes(p.screenshot)), ("application/pdf", pdf))          # kept exactly as uploaded
+        r = self.c.get(reverse("payment_screenshot", args=[p.pk]))
+        self.assertEqual(r["Content-Type"], "application/pdf"); self.assertEqual(r["Content-Security-Policy"], "sandbox")
+        self.assertEqual(r["X-Content-Type-Options"], "nosniff")
+        staff = Client(); staff.force_login(User.objects.create_user("s@example.com", "s3cret-pass-9", is_staff=True))
+        self.assertContains(staff.get(reverse("admin_payments")), "Open PDF proof")
+        fake = SimpleUploadedFile("receipt.pdf", b"<html><script>alert(1)</script></html>" * 20, content_type="application/pdf")
+        self.assertContains(self._pay(screenshot=fake, transaction_id="X"), "PNG, JPG or PDF")      # the file is checked, not its name
 
     @override_settings(PAYMENT_ACCOUNTS=PAY)
     def test_screenshot_is_private_to_owner_and_staff(self):
@@ -673,6 +703,33 @@ class AppTests(TestCase):
         self.assertNotContains(sc.get(reverse("admin_user", args=[self.user.pk])), "Save role")
         role(sc, staff, "superuser"); staff.refresh_from_db(); self.assertFalse(staff.is_superuser)
         self.assertEqual(role(self.c, self.user, "superuser").status_code, 404)                          # normal users: no panel at all
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_unsubscribe_and_cancel_pending_payment(self):
+        self.assertEqual(self.c.post(reverse("subscription_cancel")).status_code, 302)           # nothing to cancel: harmless
+        self.assertNotContains(self.c.get(reverse("subscription")), "Unsubscribe")
+        self.user.activate_plan("yearly")
+        page = self.c.get(reverse("subscription"))
+        self.assertContains(page, "Unsubscribe"); self.assertContains(page, "no refund")           # warns before ending the plan
+        self.c.post(reverse("subscription_cancel"))
+        self.user.refresh_from_db()
+        self.assertEqual((self.user.is_paid, self.user.plan, self.user.paid_until), (False, "", None))
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())                           # account and records are untouched
+        self.assertEqual(Client().post(reverse("subscription_cancel")).status_code, 302)          # login required
+        # withdraw a payment that is still waiting
+        self._pay(); self._pay(transaction_id="B")
+        first, second = PaymentRequest.objects.order_by("id")
+        self.assertContains(self.c.get(reverse("subscription")), "Cancel request")
+        other = Client(); other.force_login(User.objects.create_user("o@example.com", "s3cret-pass-9"))
+        other.post(reverse("payment_cancel", args=[first.pk]))                                    # someone else's request
+        first.refresh_from_db(); self.assertEqual(first.status, "pending")
+        self.c.post(reverse("payment_cancel", args=[first.pk]))
+        first.refresh_from_db(); self.assertEqual(first.status, "cancelled")
+        admin = User.objects.create_user("a@x.com", "s3cret-pass-9", is_staff=True)
+        self.assertFalse(first.review("approved", admin))                                         # a cancelled request can't be approved
+        self.user.refresh_from_db(); self.assertFalse(self.user.is_paid)
+        self.assertContains(self.c.get(reverse("subscription")), "Cancelled")
+        self.c.post(reverse("payment_cancel", args=[second.pk])); self.c.post(reverse("payment_cancel", args=[second.pk]))   # idempotent
 
     def test_taka_filter_uses_bd_grouping(self):
         from .templatetags.ui import taka

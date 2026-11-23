@@ -94,6 +94,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     def has_access(self):
         return self.is_paid or self.trial_days_left > 0
 
+    def end_subscription(self):
+        """Unsubscribe: the paid plan ends now. Records stay; AI features follow the trial rules again. No auto-renewal exists to stop."""
+        self.plan, self.paid_until = "", None
+        self.save(update_fields=["plan", "paid_until"])
+
     def activate_plan(self, plan_key):
         """Start (or extend) a paid plan. Time is added after the current paid period, never lost."""
         days = settings.PLANS[plan_key]["days"]
@@ -250,7 +255,7 @@ class PaymentRequest(models.Model):
     """A manual payment: the user sent money to one of our accounts and uploaded proof; staff verify and approve."""
 
     METHODS = [("bkash", "bKash"), ("nagad", "Nagad"), ("rocket", "Rocket"), ("bank", "Bank transfer")]
-    STATUSES = [("pending", "Pending review"), ("approved", "Approved"), ("rejected", "Rejected")]
+    STATUSES = [("pending", "Pending review"), ("approved", "Approved"), ("rejected", "Rejected"), ("cancelled", "Cancelled")]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payments")
     plan = models.CharField(max_length=10)
     amount = models.DecimalField(max_digits=10, decimal_places=2)  # the plan price when the request was made
@@ -261,7 +266,8 @@ class PaymentRequest(models.Model):
     sender_number = models.CharField("paid from (number / account)", max_length=40, blank=True)
     transaction_id = models.CharField(max_length=60, blank=True)
     note = models.CharField(max_length=300, blank=True)
-    screenshot = models.BinaryField(editable=False)  # re-encoded JPEG; Vercel's disk is read-only so it lives in the database
+    screenshot = models.BinaryField(editable=False)  # the proof: a re-encoded JPEG, or the PDF as uploaded (Vercel's disk is read-only, so it lives in the database)
+    proof_type = models.CharField(max_length=20, default="image/jpeg")
     status = models.CharField(max_length=10, choices=STATUSES, default="pending")
     admin_note = models.CharField(max_length=300, blank=True)  # shown to the user, e.g. why it was rejected
     created_at = models.DateTimeField(auto_now_add=True)
