@@ -42,8 +42,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "expenseai.urls"
-WSGI_APPLICATION = "expenseai.wsgi.application"
+ROOT_URLCONF = "hishabai.urls"
+WSGI_APPLICATION = "hishabai.wsgi.application"
 
 TEMPLATES = [
     {

@@ -1,4 +1,4 @@
-# ExpenseAI — AI-powered personal expense tracker (Django)
+# HishabAI — AI-powered personal expense tracker (Django)
 
 Bangla/English natural-language expense entry, dashboard, budgets & reports, AI assistant and a 30-day trial → paid plans.
 Stack: Django 5.2 · Neon Postgres · Vercel · Gemini + Grok (free-tier AI, automatic fallback).
@@ -55,8 +55,8 @@ You need **at least one**. With both, if the first fails or hits its limit the a
 
 ## 5. Push to GitHub
 ```bash
-git add -A && git commit -m "ExpenseAI: initial version"
-gh repo create expenseai --private --source=. --push     # or create on github.com, then git remote add + git push
+git add -A && git commit -m "HishabAI: initial version"
+gh repo create hishabai --private --source=. --push     # or create on github.com, then git remote add + git push
 ```
 `.env` is git-ignored — never commit keys.
 

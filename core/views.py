@@ -315,7 +315,7 @@ def transaction_delete(request, pk):
 @login_required
 def transactions_csv(request):
     resp = HttpResponse(content_type="text/csv; charset=utf-8")
-    resp["Content-Disposition"] = 'attachment; filename="expenseai-transactions.csv"'
+    resp["Content-Disposition"] = 'attachment; filename="hishabai-transactions.csv"'
     resp.write("﻿")  # BOM so Excel shows Bangla correctly
     w = csv.writer(resp)
     w.writerow(["Date", "Type", "Category", "Amount (BDT)", "Note"])
