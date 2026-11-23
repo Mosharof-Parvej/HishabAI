@@ -70,6 +70,28 @@ def user_active(request, pk):
     return redirect("admin_user", pk=pk)
 
 
+ROLES = {"user": (False, False), "staff": (True, False), "superuser": (True, True)}  # role -> (is_staff, is_superuser)
+
+
+@require_POST
+@staff_only
+def user_role(request, pk):
+    """Superusers set another account's role: User, Staff (admin panel) or Superuser (also manages roles)."""
+    u = get_object_or_404(User, pk=pk)
+    role = request.POST.get("role")
+    if not request.user.is_superuser:
+        messages.error(request, "Only a superuser can change roles.")
+    elif role not in ROLES:
+        messages.error(request, "Choose a role.")
+    elif u.pk == request.user.pk:
+        messages.error(request, "You can't change your own role. Ask another superuser.")  # also guarantees one superuser always remains
+    else:
+        u.is_staff, u.is_superuser = ROLES[role]
+        u.save(update_fields=["is_staff", "is_superuser"])
+        messages.success(request, f"{u.email} is now {'a ' + role if role != 'user' else 'a regular user'}.")
+    return redirect("admin_user", pk=pk)
+
+
 @staff_only
 def payments(request):
     status = request.GET.get("status", "pending")

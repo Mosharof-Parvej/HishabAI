@@ -41,6 +41,7 @@ urlpatterns = [
     path("admin/", va.overview, name="admin_overview"),
     path("admin/users/", va.users, name="admin_users"),
     path("admin/users/<int:pk>/", va.user_detail, name="admin_user"),
+    path("admin/users/<int:pk>/role/", va.user_role, name="admin_user_role"),
     path("admin/users/<int:pk>/active/", va.user_active, name="admin_user_active"),
     path("admin/payments/", va.payments, name="admin_payments"),
     path("admin/payments/<int:pk>/review/", va.payment_review, name="admin_payment_review"),

@@ -655,6 +655,25 @@ class AppTests(TestCase):
         self.assertEqual(self.c.post(reverse("admin_payment_review", args=[second.pk]), {"action": "approve"}).status_code, 404)  # normal users can't review
         self.assertEqual(len(sc.get(reverse("admin_payments"), {"status": "approved"}).context["page"]), 1)
 
+    def test_superusers_can_promote_and_demote_other_users(self):
+        boss = User.objects.create_user("boss@example.com", "s3cret-pass-9", is_staff=True, is_superuser=True); bc = Client(); bc.force_login(boss)
+        _, sc = self._staff()                                                           # plain staff
+        role = lambda client, target, r: client.post(reverse("admin_user_role", args=[target.pk]), {"role": r})
+        role(bc, self.user, "staff"); self.user.refresh_from_db()
+        self.assertEqual((self.user.is_staff, self.user.is_superuser), (True, False))
+        role(bc, self.user, "superuser"); self.user.refresh_from_db()
+        self.assertEqual((self.user.is_staff, self.user.is_superuser), (True, True))
+        self.assertContains(bc.get(reverse("admin_user", args=[self.user.pk])), "Save role")        # the role control is shown to superusers
+        role(bc, self.user, "user"); self.user.refresh_from_db()
+        self.assertEqual((self.user.is_staff, self.user.is_superuser), (False, False))
+        role(bc, self.user, "admin"); self.user.refresh_from_db(); self.assertFalse(self.user.is_staff)   # unknown role ignored
+        role(bc, boss, "user"); boss.refresh_from_db(); self.assertTrue(boss.is_superuser)               # cannot change own role
+        staff = User.objects.get(email="staff@example.com")
+        role(sc, self.user, "superuser"); self.user.refresh_from_db(); self.assertFalse(self.user.is_superuser)   # staff cannot promote
+        self.assertNotContains(sc.get(reverse("admin_user", args=[self.user.pk])), "Save role")
+        role(sc, staff, "superuser"); staff.refresh_from_db(); self.assertFalse(staff.is_superuser)
+        self.assertEqual(role(self.c, self.user, "superuser").status_code, 404)                          # normal users: no panel at all
+
     def test_taka_filter_uses_bd_grouping(self):
         from .templatetags.ui import taka
         self.assertEqual(taka(100000), "৳1,00,000")

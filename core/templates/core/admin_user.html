@@ -8,6 +8,9 @@
     <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Last login</span><span>{% if u.last_login %}{{ u.last_login|timesince }} ago{% else %}never{% endif %}</span></div>
     <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Sign-in</span><span>{% if u.has_usable_password %}Email &amp; password{% else %}Google{% endif %}</span></div>
     <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Language</span><span>{{ u.get_language_display }}</span></div>
+    {% if user.is_superuser and u.pk != user.pk %}<form method="post" action="{% url 'admin_user_role' u.pk %}" class="row" style="margin-top:14px">{% csrf_token %}
+      <label style="margin:0">Role</label><select name="role" style="width:170px"><option value="user" {% if not u.is_staff %}selected{% endif %}>User</option><option value="staff" {% if u.is_staff and not u.is_superuser %}selected{% endif %}>Staff (admin panel)</option><option value="superuser" {% if u.is_superuser %}selected{% endif %}>Superuser (manages roles)</option></select>
+      <button class="btn primary sm" onclick="return confirm('Change this account\'s role?')">Save role</button></form>{% endif %}
     {% if not u.is_superuser and u.pk != user.pk %}<form method="post" action="{% url 'admin_user_active' u.pk %}" style="margin-top:14px">{% csrf_token %}
       <button class="btn {% if u.is_active %}danger{% else %}primary{% endif %}" onclick="return confirm('{% if u.is_active %}Deactivate this user? They will not be able to log in.{% else %}Reactivate this user?{% endif %}')">{% if u.is_active %}Deactivate user{% else %}Reactivate user{% endif %}</button></form>{% endif %}</div>
   <div class="stack">
