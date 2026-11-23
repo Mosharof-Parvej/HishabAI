@@ -225,13 +225,10 @@ class AppTests(TestCase):
         self.assertIn('data-theme-set="system"', page)
         self.user.is_staff = True; self.user.is_superuser = True; self.user.save()
         self.assertIn('href="/admin/"', self.c.get(reverse("dashboard")).content.decode())
-        for model in ["user", "transaction", "account", "debt", "aicall", "category", "budget", "debtpayment"]:
-            self.assertEqual(self.c.get(f"/manage/core/{model}/").status_code, 200, model)
-        self.assertEqual(self.c.get(f"/manage/core/user/{self.user.pk}/change/").status_code, 200)
-        self.assertEqual(self.c.get("/manage/core/user/add/").status_code, 403)         # signup happens on the site
+        self.assertEqual(self.c.get(reverse("admin_overview")).status_code, 200)       # the panel opens for staff
+        self.assertEqual(self.c.get("/manage/").status_code, 404)                       # Django's database admin is gone
         other = Client(); other.force_login(User.objects.create_user("n@example.com", "s3cret-pass-9"))
         self.assertEqual(other.get("/admin/").status_code, 404)                         # the panel does not exist for normal users
-        self.assertEqual(other.get("/manage/").status_code, 302)
 
     def test_bell_has_notification_payload_and_anonymous_header(self):
         today = timezone.localdate()
@@ -523,32 +520,27 @@ class AppTests(TestCase):
         self.assertEqual(staff.get(url).status_code, 200)
 
     @override_settings(PAYMENT_ACCOUNTS=PAY)
-    def test_admin_approves_once_and_plan_extends_not_resets(self):
-        self._pay(); self._pay(transaction_id="B", plan="yearly")
-        admin = User.objects.create_user("a@x.com", "s3cret-pass-9", is_staff=True, is_superuser=True)
-        ac = Client(); ac.force_login(admin)
-        self.assertContains(ac.get("/manage/core/paymentrequest/"), "TX123")
-        monthly, yearly = PaymentRequest.objects.order_by("id")
-        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [monthly.pk]})
-        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [monthly.pk]})   # twice: no double credit
+    def test_approving_extends_the_plan_and_only_once(self):
+        self._pay(); self._pay(transaction_id="B", plan="yearly"); self._pay(transaction_id="C")
+        admin = User.objects.create_user("a@x.com", "s3cret-pass-9", is_staff=True)
+        monthly, yearly, third = PaymentRequest.objects.order_by("id")
+        self.assertTrue(monthly.review("approved", admin))
+        self.assertFalse(monthly.review("approved", admin))                                      # twice: no double credit
         self.user.refresh_from_db(); first_end = self.user.paid_until
-        self.assertTrue(self.user.is_paid); self.assertEqual(self.user.plan, "monthly")
-        self.assertAlmostEqual((first_end - timezone.now()).days, 30, delta=1)
-        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [yearly.pk]})
+        self.assertEqual(self.user.plan, "monthly"); self.assertAlmostEqual((first_end - timezone.now()).days, 30, delta=1)
+        self.assertTrue(yearly.review("approved", admin))
         self.user.refresh_from_db()
         self.assertAlmostEqual((self.user.paid_until - first_end).days, 365, delta=1)             # added after the paid period
-        monthly.refresh_from_db(); self.assertEqual((monthly.status, monthly.reviewed_by), ("approved", admin))
-        # reject path + final state
-        self._pay(transaction_id="C"); third = PaymentRequest.objects.get(transaction_id="C")
-        ac.post("/manage/core/paymentrequest/", {"action": "reject", "_selected_action": [third.pk]})
-        third.refresh_from_db(); self.assertEqual(third.status, "rejected"); self.assertTrue(third.admin_note)
+        self.assertEqual((monthly.status, monthly.reviewed_by), ("approved", admin))
+        self.assertTrue(third.review("rejected", admin, "Amount did not match"))
         before = User.objects.get(pk=self.user.pk).paid_until
-        third.review("approved", admin)                                                          # cannot flip a reviewed payment
-        self.assertEqual((third.status, User.objects.get(pk=self.user.pk).paid_until), ("rejected", before))
+        self.assertFalse(third.review("approved", admin))                                        # a reviewed payment is final
+        self.assertEqual((third.status, third.admin_note, User.objects.get(pk=self.user.pk).paid_until), ("rejected", "Amount did not match", before))
         self.assertContains(self.c.get(reverse("subscription")), "Rejected")
-        # staff see a pending badge in the menu; normal users do not
+        self.assertEqual(Client().get(reverse("dashboard")).status_code, 302)
+        ac = Client(); ac.force_login(admin)
         self._pay(transaction_id="D")
-        self.assertEqual(ac.get(reverse("dashboard")).context["pending_payments"], 1)
+        self.assertEqual(ac.get(reverse("dashboard")).context["pending_payments"], 1)             # staff see a pending badge
         self.assertNotIn("pending_payments", self.c.get(reverse("dashboard")).context)
 
     # ------------------------------------------------------------ admin panel

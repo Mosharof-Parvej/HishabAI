@@ -36,8 +36,7 @@
   <div class="card"><h3 style="color:var(--text)">What people use · last 30 days</h3>
     {% for label, n in s.usage %}<div class="budget-row"><div class="row between"><span>{{ label }}</span><b>{{ n }}</b></div><div class="bar"><i style="width:{% if usage_max %}{% widthratio n usage_max 100 %}{% else %}0{% endif %}%"></i></div></div>{% endfor %}</div>
   <div class="card"><h3 style="color:var(--text)">All time</h3>
-    {% for label, n in s.all_time %}<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line)"><span>{{ label }}</span><b>{{ n }}</b></div>{% endfor %}
-    {% if user.is_superuser %}<p style="margin-top:12px"><a class="link sm" href="/manage/">Open the database admin →</a></p>{% endif %}</div>
+    {% for label, n in s.all_time %}<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line)"><span>{{ label }}</span><b>{{ n }}</b></div>{% endfor %}</div>
 </div>
 {{ s.charts|json_script:"charts" }}
 {% endblock %}

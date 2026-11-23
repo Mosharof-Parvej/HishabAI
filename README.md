@@ -95,7 +95,6 @@ Making someone staff (so they see **Admin panel**): `python manage.py shell -c "
 ## 8. Admin panel
 `/admin/` (staff only): visitors and time on site, sign-ups, AI usage (requests and tokens, whole app and top users), entries per day, a Users list (search, filter, deactivate) and Payments review. It shows counts only, never users' amounts or what they typed.
 AI limits that protect the free tiers: `AI_DAILY_LIMIT` (per user per day), `AI_APP_DAILY_REQUESTS` (default 400) and `AI_APP_DAILY_TOKENS` (default 1,000,000) for the whole app; they reset at midnight Bangladesh time.
-Django's own database admin lives at `/manage/` (superusers).
 
 ## 9. Before going fully live
 - Free AI tiers have rate limits and no SLA; use a paid key for real traffic.
