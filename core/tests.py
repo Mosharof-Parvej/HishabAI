@@ -481,7 +481,6 @@ class AppTests(TestCase):
         self.assertContains(self.c.get(reverse("subscription")), "Take subscription")
         with self.settings(PAYMENT_ACCOUNTS={k: {} for k in self.PAY}):
             page = self.c.get(reverse("subscription"))
-            self.assertNotContains(page, "no payment account numbers")                         # normal users do not see the staff hint
             self.assertNotContains(page, "disabled\" href")                                    # and the buttons still work
             self.assertContains(page, reverse("payment_start") + "?plan=monthly")
 
@@ -520,8 +519,7 @@ class AppTests(TestCase):
         self.assertEqual(len(page.context["method_choices"]), 4)                                  # bKash, Nagad, Rocket, Bank
         self.assertEqual(self._pay(method="nagad", transaction_id="").status_code, 302)           # submitting works too
         self.assertEqual(PaymentRequest.objects.get().method, "nagad")
-        staff_page = Client(); staff_page.force_login(User.objects.create_user("s@example.com", "s3cret-pass-9", is_staff=True))
-        self.assertContains(staff_page.get(reverse("subscription")), "no payment account numbers")   # only staff are told to configure them
+        self.assertNotContains(self.c.get(reverse("subscription")), "no payment account numbers")   # no setup notice is shown to anyone
 
     @override_settings(PAYMENT_ACCOUNTS=PAY)
     def test_pdf_proof_is_accepted_stored_and_served_safely(self):
@@ -531,7 +529,7 @@ class AppTests(TestCase):
         p = PaymentRequest.objects.get()
         self.assertEqual((p.proof_type, bytes(p.screenshot)), ("application/pdf", pdf))          # kept exactly as uploaded
         r = self.c.get(reverse("payment_screenshot", args=[p.pk]))
-        self.assertEqual(r["Content-Type"], "application/pdf"); self.assertEqual(r["Content-Security-Policy"], "sandbox")
+        self.assertEqual(r["Content-Type"], "application/pdf"); self.assertEqual(r["X-Frame-Options"], "SAMEORIGIN")
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
         staff = Client(); staff.force_login(User.objects.create_user("s@example.com", "s3cret-pass-9", is_staff=True))
         self.assertContains(staff.get(reverse("admin_payments")), "Open PDF proof")
@@ -750,6 +748,30 @@ class AppTests(TestCase):
         self.c.get(reverse("debts"))                                                               # visiting Debts also counts as seen
         self.assertEqual(self.c.get(reverse("dashboard")).context["reminders_unread"], 0)
         self.assertEqual(Client().post(reverse("api_notifications_seen")).status_code, 302)       # login required
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_admin_payment_review_page_shows_everything_submitted(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self._pay(transaction_id="IMG1", note="paid at 3pm")
+        self._pay(transaction_id="PDF1", screenshot=SimpleUploadedFile("r.pdf", b"%PDF-1.4\n%%EOF\n" + b"x" * 600, content_type="application/pdf"))
+        img, pdf = PaymentRequest.objects.order_by("id")
+        _, sc = self._staff()
+        page = sc.get(reverse("admin_payment", args=[img.pk]))
+        for needle in ["IMG1", "paid at 3pm", "01711111111", "n@example.com", "Nusrat J", "a@example.com", reverse("payment_screenshot", args=[img.pk]), "PDF1", "Approve &amp; activate plan"]:
+            self.assertContains(page, needle)                                                   # all fields, the proof and the user's other payment
+        self.assertContains(sc.get(reverse("admin_payment", args=[pdf.pk])), "<iframe")         # a PDF is shown inline
+        self.assertEqual(self.c.get(reverse("admin_payment", args=[img.pk])).status_code, 404)   # normal users cannot open it
+        r = sc.post(reverse("admin_payment_review", args=[img.pk]), {"action": "approve", "next": reverse("admin_payments")})
+        self.assertRedirects(r, reverse("admin_payments"))
+        self.user.refresh_from_db(); self.assertTrue(self.user.is_paid)
+        self.assertNotContains(sc.get(reverse("admin_payment", args=[img.pk])), "Approve &amp; activate plan")  # reviewed -> no buttons
+
+    def test_ask_is_named_ask_hishabai_and_bold(self):
+        page = self.c.get(reverse("dashboard")).content.decode()
+        self.assertIn("Ask HishabAI", page); self.assertNotIn(">Ask AI<", page); self.assertIn('class="nav-ask', page)
+        self.assertIn("font-weight:700", open("core/static/core/css/app.css").read().split(".nav a.nav-ask")[1][:60])
+        self.c.post(reverse("set_language"), {"language": "bn"})
+        self.assertContains(self.c.get(reverse("dashboard")), "HishabAI-কে জিজ্ঞেস করুন")
 
     def test_taka_filter_uses_bd_grouping(self):
         from .templatetags.ui import taka

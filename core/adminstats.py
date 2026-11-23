@@ -83,7 +83,7 @@ def overview():
             "with_ai": with_ai, "by_hand": by_hand, "debts": debts30,
         },
         "usage": [("Entries added with AI", sum(with_ai)), ("Entries added by hand", sum(by_hand)), ("Debts added", sum(debts30)),
-                  ("AI requests (add, voice, Ask AI)", sum(kinds.values()))],
+                  ("AI requests (add, voice, Ask HishabAI)", sum(kinds.values()))],
         "all_time": [("Transactions", Transaction.objects.count()), ("Debts", Debt.objects.count()),
                      ("Money accounts", Account.objects.count()),
                      ("Budgets set", Budget.objects.count()),

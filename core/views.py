@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.db.models import F
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -731,7 +732,7 @@ def debt_delete(request, pk):
 def subscription(request):
     return render(request, "core/subscription.html", {
         "nav": "subscription", "plans": settings.PLANS, "payments": PaymentRequest.objects.filter(user=request.user).defer("screenshot")[:10],
-        "has_pending": PaymentRequest.objects.filter(user=request.user, status="pending").exists(), "accounts_missing": not payment_methods()})
+        "has_pending": PaymentRequest.objects.filter(user=request.user, status="pending").exists()})
 
 
 def payment_methods():
@@ -850,6 +851,7 @@ def payment_cancel(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin  # the admin review page shows the proof inline
 def payment_screenshot(request, pk):
     pay = PaymentRequest.objects.filter(pk=pk).first()
     if not pay or not (pay.user_id == request.user.pk or request.user.is_staff):
@@ -859,7 +861,6 @@ def payment_screenshot(request, pk):
     resp["X-Content-Type-Options"] = "nosniff"
     if pay.proof_type == "application/pdf":
         resp["Content-Disposition"] = f'inline; filename="payment-{pay.pk}.pdf"'
-        resp["Content-Security-Policy"] = "sandbox"  # a PDF can't run anything in our origin
     return resp
 
 

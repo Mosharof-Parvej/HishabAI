@@ -8,12 +8,11 @@
 {% elif user.has_access %}<div class="notice" style="margin-bottom:14px"><b>Your {{ TRIAL_DAYS }}-day free trial ends in {{ user.trial_days_left }} days ({{ user.trial_ends_at|date:"j M Y" }}).</b> Subscribe anytime — all your transactions, budgets and reports stay safe.</div>
 {% else %}<div class="msg error" style="margin-bottom:14px"><b>Your free trial has ended.</b> Take a subscription to unlock AI features again.</div>{% endif %}
 {% if has_pending %}<div class="notice" style="margin-bottom:14px">⏳ Your payment is being checked. We’ll activate your plan as soon as it’s verified — usually within a few hours.</div>{% endif %}
-{% if accounts_missing and user.is_staff %}<div class="notice" style="margin-bottom:14px">Only staff see this: no payment account numbers are set yet, so users will see an empty "Send money to" box. Add <code>PAY_BKASH</code>, <code>PAY_NAGAD</code>, <code>PAY_ROCKET</code> and/or the <code>PAY_BANK_*</code> settings in Vercel.</div>{% endif %}
 <div class="plans">
   <div class="card plan"><span class="tag">{% if not user.is_paid %}CURRENT PLAN{% else %}TRIAL{% endif %}</span><h2 style="margin-top:8px">Free Trial</h2><div class="price">৳0 <span class="sm muted">/ {{ TRIAL_DAYS }} days</span></div><p class="sm muted">Try every feature, no card needed</p>
-    <ul><li>All premium features</li><li>AI entry in Bangla &amp; English</li><li>AskHishabAI</li><li>Budgets &amp; reports</li><li>No payment card required</li></ul><button class="btn block" disabled>{% if user.is_paid %}Trial ended{% else %}Current plan{% endif %}</button></div>
+    <ul><li>All premium features</li><li>AI entry in Bangla &amp; English</li><li>Ask HishabAI</li><li>Budgets &amp; reports</li><li>No payment card required</li></ul><button class="btn block" disabled>{% if user.is_paid %}Trial ended{% else %}Current plan{% endif %}</button></div>
   <div class="card plan"><h2>Monthly</h2><div class="price">৳{{ plans.monthly.price }} <span class="sm muted">/ month</span></div><p class="sm muted">Flexible — pay when you need it</p>
-    <ul><li>Unlimited AI transaction entry</li><li>AskHishabAI</li><li>Budgets, alerts &amp; insights</li><li>Monthly &amp; yearly reports</li><li>Export reports as PDF</li></ul>
+    <ul><li>Unlimited AI transaction entry</li><li>Ask HishabAI</li><li>Budgets, alerts &amp; insights</li><li>Monthly &amp; yearly reports</li><li>Export reports as PDF</li></ul>
     <a class="btn outline block" href="{% url 'payment_start' %}?plan=monthly">Take subscription</a></div>
   <div class="card plan best"><span class="badge">BEST VALUE · SAVE 27%</span><h2>Yearly</h2><div class="price">৳{{ plans.yearly.price }} <span class="sm muted">/ year</span></div><p class="sm muted">Just ৳108 per month, billed yearly</p>
     <ul><li>Everything in Monthly</li><li>Save ৳489 every year</li><li>Full-year spending report</li><li>Priority support</li><li>Early access to new features</li></ul>

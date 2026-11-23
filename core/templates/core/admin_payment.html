@@ -1,0 +1,33 @@
+{% extends "core/admin_base.html" %}{% load ui %}
+{% block content %}
+<p style="margin-bottom:12px"><a class="link" href="{% url 'admin_payments' %}">← All payments</a></p>
+<div class="cols">
+  <div class="card"><h3 style="color:var(--text)">Payment proof</h3>
+    {% if p.proof_type == 'application/pdf' %}<iframe src="{% url 'payment_screenshot' p.pk %}" title="Payment proof (PDF)" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:10px;background:#fff"></iframe>
+      <p class="sm" style="margin-top:8px"><a class="link" href="{% url 'payment_screenshot' p.pk %}" target="_blank" rel="noopener">Open the PDF in a new tab ↗</a></p>
+    {% else %}<a href="{% url 'payment_screenshot' p.pk %}" target="_blank" rel="noopener"><img src="{% url 'payment_screenshot' p.pk %}" alt="Payment proof" style="width:100%;max-height:80vh;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:var(--card2)"></a>
+      <p class="sm muted" style="margin-top:8px">Click the image to open it full size.</p>{% endif %}</div>
+  <div class="stack">
+    <div class="card">
+      <div class="row between" style="margin-bottom:6px"><b style="font-size:1.15rem">{{ p.plan|title }} · {{ p.amount|taka }}</b><span class="pill {% if p.status == 'approved' %}income{% elif p.status == 'rejected' %}expense{% elif p.status == 'cancelled' %}{% else %}warnp{% endif %}">{{ p.get_status_display }}</span></div>
+      <p class="sm muted" style="margin-bottom:10px">Submitted {{ p.created_at|date:"j M Y, g:i a" }} · via {{ p.get_method_display }}{% if plan %} · the {{ plan.label }} plan costs {{ plan.price|taka }} for {{ plan.days }} days{% endif %}</p>
+      <dl class="paylines">
+        <div><dt>Account (login)</dt><dd><a class="link" href="{% url 'admin_user' p.user_id %}">{{ p.user.email }}</a></dd></div>
+        <div><dt>Name</dt><dd>{{ p.name }}</dd></div><div><dt>Email given</dt><dd>{{ p.email }}</dd></div><div><dt>Phone</dt><dd>{{ p.phone }}</dd></div>
+        <div><dt>Paid from</dt><dd>{{ p.sender_number|default:"—" }}</dd></div><div><dt>Transaction ID</dt><dd>{{ p.transaction_id|default:"— (not given)" }}</dd></div>
+        {% if p.note %}<div><dt>Note from user</dt><dd>{{ p.note }}</dd></div>{% endif %}
+        {% if p.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ p.reviewed_at|date:"j M Y, g:i a" }}{% if p.reviewed_by %} by {{ p.reviewed_by.email }}{% endif %}</dd></div>{% endif %}
+        {% if p.admin_note %}<div><dt>Our note</dt><dd>{{ p.admin_note }}</dd></div>{% endif %}</dl>
+      {% if p.status == 'pending' %}<div class="notice sm" style="margin:12px 0">Check that the screenshot shows <b>{{ p.amount|taka }}</b> sent to your account, the right date and the transaction ID, then approve.</div>
+      <form method="post" action="{% url 'admin_payment_review' p.pk %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'admin_payments' %}">
+        <input name="note" placeholder="Note to the user (optional — shown if rejected)" maxlength="300" style="margin-bottom:8px">
+        <div class="row"><button name="action" value="approve" class="btn primary" style="flex:1" onclick="return confirm('Approve and activate the {{ p.plan }} plan for {{ p.user.email }}?')">Approve &amp; activate plan</button>
+          <button name="action" value="reject" class="btn danger" style="flex:1" onclick="return confirm('Reject this payment?')">Reject</button></div></form>
+      {% elif p.status == 'cancelled' %}<p class="muted" style="margin-top:12px">The user cancelled this request.</p>{% endif %}</div>
+    <div class="card"><h3 style="color:var(--text)">This user's other payments</h3>
+      {% for o in others %}<a href="{% url 'admin_payment' o.pk %}" class="row between" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>{{ o.plan|title }} · {{ o.amount|taka }} · {{ o.get_method_display }}<div class="sm muted">{{ o.created_at|date:"j M Y" }}{% if o.transaction_id %} · {{ o.transaction_id }}{% endif %}</div></span>
+        <span class="pill {% if o.status == 'approved' %}income{% elif o.status == 'rejected' %}expense{% elif o.status == 'cancelled' %}{% else %}warnp{% endif %}">{{ o.get_status_display }}</span></a>
+      {% empty %}<p class="muted">No other payments from this user.</p>{% endfor %}</div>
+  </div>
+</div>
+{% endblock %}

@@ -104,6 +104,15 @@ def payments(request):
                                                               tabs=[("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("all", "All")]))
 
 
+@staff_only
+def payment_detail(request, pk):
+    """Everything the user submitted for one payment, with the proof shown large, so staff can verify and decide."""
+    pay = get_object_or_404(PaymentRequest.objects.select_related("user", "reviewed_by").defer("screenshot"), pk=pk)
+    others = PaymentRequest.objects.filter(user=pay.user).exclude(pk=pk).defer("screenshot")[:10]
+    plan = settings.PLANS.get(pay.plan, {})
+    return render(request, "core/admin_payment.html", _ctx("payments", p=pay, others=others, plan=plan))
+
+
 @require_POST
 @staff_only
 def payment_review(request, pk):

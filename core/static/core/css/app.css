@@ -247,3 +247,16 @@ html.theming *,html.theming *::before,html.theming *::after{transition:backgroun
 .btn.disabled{opacity:.5;pointer-events:none}
 code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:.8125rem}
 .rem.unread{background:var(--primary-50);margin:0 -8px;padding:8px;border-radius:8px}
+
+/* sign-in hero */
+.auth-l .lead{font-size:1.0625rem;line-height:1.5;opacity:.95;max-width:420px}
+.auth-l .demo{display:grid;gap:8px;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.16)}
+.auth-l .say{display:flex;align-items:center;gap:8px;font-weight:600;color:#0f172a}.auth-l .say svg{color:#059669;flex:none}
+.auth-l .say.alt{font-weight:500;color:#334155;padding-left:24px}
+.auth-l .got{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-top:1px solid #e2e8f0;color:#0f172a}
+.auth-l .got i{font-style:normal;color:#64748b;font-size:.75rem}
+.auth-l .got .expense{color:#e11d48}.auth-l .got .income{color:#059669}
+.auth-l .perks{list-style:none;display:flex;flex-wrap:wrap;gap:8px;padding:0;margin:0}
+.auth-l .perks li{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:5px 12px;font-size:.8125rem;font-weight:600}
+
+.nav a.nav-ask{font-weight:700;color:var(--text)}.nav a.nav-ask.active{color:var(--primary-d)}

@@ -15,7 +15,8 @@
       {% if p.note %}<div><dt>Note</dt><dd>{{ p.note }}</dd></div>{% endif %}
       {% if p.admin_note %}<div><dt>Our note</dt><dd>{{ p.admin_note }}</dd></div>{% endif %}
       {% if p.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ p.reviewed_at|date:"j M Y" }}</dd></div>{% endif %}</dl></div>
-  {% if p.status == 'pending' %}<form method="post" action="{% url 'admin_payment_review' p.pk %}" style="margin-top:12px">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <a class="btn sm block" style="margin-top:10px" href="{% url 'admin_payment' p.pk %}">View all details &amp; proof →</a>
+  {% if p.status == 'pending' %}<form method="post" action="{% url 'admin_payment_review' p.pk %}" style="margin-top:10px">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
     <input name="note" placeholder="Note to the user (optional — shown if rejected)" maxlength="300" style="margin-bottom:8px">
     <div class="row"><button name="action" value="approve" class="btn primary" style="flex:1">Approve &amp; activate</button><button name="action" value="reject" class="btn danger" style="flex:1" onclick="return confirm('Reject this payment?')">Reject</button></div></form>{% endif %}
 </div>

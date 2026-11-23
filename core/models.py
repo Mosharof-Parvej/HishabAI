@@ -308,7 +308,7 @@ class PaymentRequest(models.Model):
 class AICall(models.Model):
     """One AI call. Counted per user and for the whole app to protect the shared free-tier API keys."""
 
-    KINDS = [("entry", "Smart Entry"), ("ask", "Ask AI"), ("voice", "Voice"), ("insight", "Insight"), ("tips", "Budget tips")]
+    KINDS = [("entry", "Smart Entry"), ("ask", "Ask HishabAI"), ("voice", "Voice"), ("insight", "Insight"), ("tips", "Budget tips")]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     kind = models.CharField(max_length=8, choices=KINDS, blank=True)

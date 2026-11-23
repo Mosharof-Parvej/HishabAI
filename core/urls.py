@@ -46,6 +46,7 @@ urlpatterns = [
     path("admin/users/<int:pk>/role/", va.user_role, name="admin_user_role"),
     path("admin/users/<int:pk>/active/", va.user_active, name="admin_user_active"),
     path("admin/payments/", va.payments, name="admin_payments"),
+    path("admin/payments/<int:pk>/", va.payment_detail, name="admin_payment"),
     path("admin/payments/<int:pk>/review/", va.payment_review, name="admin_payment_review"),
     path("api/notifications/seen/", v.api_notifications_seen, name="api_notifications_seen"),
     path("api/ping/", v.api_ping, name="api_ping"),

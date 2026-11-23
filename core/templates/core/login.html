@@ -4,11 +4,21 @@
 <div class="auth">
   <section class="auth-l">
     <div class="brand" style="padding:0"><span class="logo">৳</span>HishabAI</div>
-    <h2>Track your money<br>just by typing.</h2>
-    <p>Write in Bangla or English — AI records, categorizes and analyzes it for you.</p>
-    <div class="demo"><span class="sm muted">Try typing:</span><br>আজ বাজারে ৫৪০ টাকা খরচ হলো</div>
-    <div class="demo"><span class="spark">✦</span> <span class="sm muted">AI extracted 1 transaction</span><br><b>Groceries</b> · Expense · Today <b class="expense" style="float:right">−৳540</b></div>
-    <p class="sm" style="opacity:.85">{{ TRIAL_DAYS }}-day free trial · No card required · Your data stays yours</p>
+    <h2>Track your money<br>just by saying<br>or typing.</h2>
+    <p class="lead">In <b>Bangla</b>, <b>English</b> or <b>Banglish</b> — AI records, categorizes and analyzes it for you.</p>
+    <div class="demo">
+      <span class="sm muted">Try saying or typing:</span>
+      <div class="say"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v4M8 22h8"/></svg><span>আজ বাজারে ৫৪০ টাকা খরচ হলো, রিকশা ৮০</span></div>
+      <div class="say alt"><span>gotokal lunch 250, tuition theke 6000 pelam</span></div>
+    </div>
+    <div class="demo">
+      <span class="sm muted"><span class="spark">✦</span> AI added 3 entries</span>
+      <div class="got"><span>🛒 Groceries <i>· Expense</i></span><b class="expense">−৳540</b></div>
+      <div class="got"><span>🚌 Transport <i>· Expense</i></span><b class="expense">−৳80</b></div>
+      <div class="got"><span>📚 Tuition <i>· Income</i></span><b class="income">+৳6,000</b></div>
+    </div>
+    <ul class="perks"><li>🎤 Speak or type</li><li>🏦 bKash · Nagad · banks</li><li>🔔 Debt reminders</li></ul>
+    <p class="sm" style="opacity:.9">{{ TRIAL_DAYS }}-day free trial · No card required · Your data stays yours</p>
   </section>
   <section class="auth-r">
     <form method="post" novalidate>{% csrf_token %}
