@@ -95,3 +95,71 @@ window.voice = (btn, input) => {
   btn.addEventListener("click", () => { if (state === "idle") start(); else if (state === "recording") stop(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && state === "recording") { cancelled = true; stop(); } });
 };
+
+/* ---------- menus: anchored popovers that open/close on a spring and can be interrupted at any moment ---------- */
+(() => {
+  const menus = [...document.querySelectorAll("[data-menu]")];
+  const setOpen = (m, open) => { m.classList.toggle("open", open); m.querySelector("[data-menu-btn]").setAttribute("aria-expanded", open); };
+  menus.forEach(m => {
+    m.querySelector("[data-menu-btn]").addEventListener("click", e => {
+      e.stopPropagation(); const open = !m.classList.contains("open");
+      menus.forEach(o => setOpen(o, false)); setOpen(m, open);
+    });
+    m.querySelector(".pop").addEventListener("click", e => e.stopPropagation());
+  });
+  document.addEventListener("click", () => menus.forEach(m => setOpen(m, false)));
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    menus.forEach(m => { if (m.classList.contains("open")) { setOpen(m, false); m.querySelector("[data-menu-btn]").focus(); } });
+  });
+  // the bar gets its divider only once content scrolls underneath it
+  const nav = document.querySelector(".topnav");
+  if (nav) { const f = () => nav.classList.toggle("scrolled", scrollY > 4); f(); addEventListener("scroll", f, {passive: true}); }
+})();
+
+/* ---------- theme: Light / Dark / System (remembered on this device), eased rather than flashed ---------- */
+(() => {
+  const root = document.documentElement, btns = document.querySelectorAll("[data-theme-set]");
+  const current = () => { try { return localStorage.getItem("theme") || "system"; } catch (e) { return "system"; } };
+  const paint = () => btns.forEach(b => b.classList.toggle("on", b.dataset.themeSet === current()));
+  btns.forEach(b => b.addEventListener("click", () => {
+    const t = b.dataset.themeSet;
+    root.classList.add("theming"); setTimeout(() => root.classList.remove("theming"), 450);
+    if (t === "system") { root.removeAttribute("data-theme"); try { localStorage.removeItem("theme"); } catch (e) {} }
+    else { root.dataset.theme = t; try { localStorage.setItem("theme", t); } catch (e) {} }
+    paint(); setTimeout(() => dispatchEvent(new Event("themechange")), 60);
+  }));
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => dispatchEvent(new Event("themechange")));
+  paint();
+})();
+
+/* charts read their colours from the CSS variables, so they follow the theme */
+window.cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+window.chartTheme = chart => {
+  const line = cssVar("--line"), muted = cssVar("--muted");
+  Chart.defaults.color = muted;
+  Object.values(chart.options.scales || {}).forEach(s => { if (s.grid && s.grid.display !== false) s.grid.color = line; });
+  chart.data.datasets.forEach(d => { if (d.borderColor === "card") d.borderColor = cssVar("--card"); });
+  chart.update("none");
+};
+window.trackChart = chart => { addEventListener("themechange", () => chartTheme(chart)); return chart; };
+
+/* ---------- reminder notifications (shown while HishabAI is open; not background push) ---------- */
+(() => {
+  const btn = document.getElementById("notifToggle"), dataEl = document.getElementById("reminders-data"), txt = JSON.parse(document.getElementById("ui-text")?.textContent || "{}");
+  if (!btn || !("Notification" in window)) return;
+  const label = () => { btn.hidden = false;
+    btn.textContent = Notification.permission === "granted" ? txt["Notifications on"] || "Notifications on ✓" : Notification.permission === "denied" ? txt["Notifications blocked in browser settings"] || "Blocked in browser settings" : txt["Turn on notifications"] || "Turn on notifications";
+    btn.disabled = Notification.permission !== "default"; btn.style.cursor = btn.disabled ? "default" : "pointer"; };
+  const notify = () => {
+    if (Notification.permission !== "granted" || !dataEl) return;
+    const today = new Date().toISOString().slice(0, 10);
+    (JSON.parse(dataEl.textContent) || []).forEach(r => {
+      const key = `notified:${r.id}:${today}`;
+      try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+      new Notification(r.title, {body: r.body, tag: "debt-" + r.id});
+    });
+  };
+  btn.addEventListener("click", async () => { await Notification.requestPermission(); label(); notify(); });
+  label(); notify();
+})();

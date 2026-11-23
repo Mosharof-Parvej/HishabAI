@@ -9,7 +9,10 @@ BN = {
     # navigation & menu
     "Dashboard": "ড্যাশবোর্ড", "Transactions": "লেনদেন", "Accounts": "অ্যাকাউন্ট", "Debts": "ধার-দেনা",
     "Categories & Budgets": "ক্যাটাগরি ও বাজেট", "Ask AI": "AI-কে জিজ্ঞেস করুন", "Profile": "প্রোফাইল", "Language": "ভাষা",
-    "About us": "আমাদের সম্পর্কে", "Subscription": "সাবস্ক্রিপশন", "Log out": "লগ আউট", "Help": "সহায়তা", "Privacy": "গোপনীয়তা",
+    "About us": "আমাদের সম্পর্কে", "About & contact": "আমাদের সম্পর্কে ও যোগাযোগ", "Admin panel": "অ্যাডমিন প্যানেল", "Theme": "থিম",
+    "Light": "লাইট", "Dark": "ডার্ক", "System": "সিস্টেম", "Reminders": "রিমাইন্ডার", "All debts": "সব ধার-দেনা",
+    "Turn on notifications": "নোটিফিকেশন চালু করুন", "Notifications on": "নোটিফিকেশন চালু ✓", "Notifications blocked in browser settings": "ব্রাউজার সেটিংসে নোটিফিকেশন বন্ধ",
+    "No reminders right now. Add a pay-back date to a debt to get one.": "এখন কোনো রিমাইন্ডার নেই। রিমাইন্ডার পেতে কোনো ধারে ফেরত দেওয়ার তারিখ দিন।", "Subscription": "সাবস্ক্রিপশন", "Log out": "লগ আউট", "Help": "সহায়তা", "Privacy": "গোপনীয়তা",
     "Made by": "তৈরি করেছেন", "Free trial": "ফ্রি ট্রায়াল", "plan": "প্ল্যান", "until": "পর্যন্ত", "days left": "দিন বাকি", "of": "/",
     "Repayment reminders": "পরিশোধের রিমাইন্ডার", "No repayments due soon.": "শীঘ্রই পরিশোধের কিছু নেই।",
     "Manage debts & reminders": "ধার ও রিমাইন্ডার দেখুন", "You owe": "আপনি দেনা", "Owes you": "আপনার পাওনা",

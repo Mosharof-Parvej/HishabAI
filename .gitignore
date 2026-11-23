@@ -6,3 +6,8 @@ __pycache__/
 db.sqlite3
 staticfiles/
 .vercel/
+
+# local AI-agent tooling (installed skills)
+.agents/
+.claude/
+skills-lock.json

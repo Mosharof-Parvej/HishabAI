@@ -194,14 +194,14 @@ class AppTests(TestCase):
     def test_language_switch_profile_menu_and_blank_about(self):
         self.assertEqual(self.user.language, "en")                                   # English by default
         page = self.c.get(reverse("dashboard"))
-        for label in ["Profile", "Language", "About us", "Dashboard"]:
+        for label in ["Profile", "Language", "About &amp; contact", "Help", "Theme", "Light", "Dark", "System", "Dashboard"]:
             self.assertContains(page, label)
         self.assertContains(page, "বাংলা")                                              # language options are shown
         self.c.post(reverse("set_language"), {"language": "bn", "next": reverse("transactions")})
         self.user.refresh_from_db()
         self.assertEqual(self.user.language, "bn")
         page = self.c.get(reverse("dashboard"))
-        for label in ["ড্যাশবোর্ড", "লেনদেন", "প্রোফাইল", "ভাষা", "আমাদের সম্পর্কে", "আজ AI:"]:
+        for label in ["ড্যাশবোর্ড", "লেনদেন", "প্রোফাইল", "ভাষা", "আমাদের সম্পর্কে ও যোগাযোগ", "থিম", "আজ AI:"]:
             self.assertContains(page, label)
         self.assertNotContains(page, ">Transactions<")
         r = self.c.post(reverse("set_language"), {"language": "bn", "next": "https://evil.example/"})
@@ -217,6 +217,37 @@ class AppTests(TestCase):
         self.assertEqual(self.c.get(reverse("settings")).status_code, 200)
         self.assertEqual(reverse("settings"), "/profile/")
         self.assertEqual(Client().post(reverse("set_language"), {"language": "bn"}).status_code, 302)  # needs login
+
+    def test_profile_menu_admin_theme_and_android_absent(self):
+        page = self.c.get(reverse("dashboard")).content.decode()
+        self.assertNotIn("Android", page)                                              # no Android app entry
+        self.assertNotIn('href="/admin/"', page)                                      # admin link is staff-only
+        self.assertIn('data-theme-set="system"', page)
+        self.user.is_staff = True; self.user.is_superuser = True; self.user.save()
+        self.assertIn('href="/admin/"', self.c.get(reverse("dashboard")).content.decode())
+        for model in ["user", "transaction", "account", "debt", "aicall", "category", "budget", "debtpayment"]:
+            self.assertEqual(self.c.get(f"/admin/core/{model}/").status_code, 200, model)
+        self.assertEqual(self.c.get(f"/admin/core/user/{self.user.pk}/change/").status_code, 200)
+        self.assertEqual(self.c.get("/admin/core/user/add/").status_code, 403)         # signup happens on the site
+        other = Client(); other.force_login(User.objects.create_user("n@example.com", "s3cret-pass-9"))
+        self.assertEqual(other.get("/admin/").status_code, 302)                         # normal users cannot enter
+
+    def test_bell_has_notification_payload_and_anonymous_header(self):
+        today = timezone.localdate()
+        Debt.objects.create(user=self.user, direction="lent", person="Karim", amount=2000, due_date=today + timedelta(days=1), remind_days=3)
+        page = self.c.get(reverse("dashboard"))
+        self.assertEqual(len(page.context["reminders_data"]), 1)
+        self.assertIn("Karim", page.context["reminders_data"][0]["title"])
+        self.assertContains(page, 'id="notifToggle"')
+        anon = Client().get(reverse("help")).content.decode()
+        self.assertNotIn("Log out", anon); self.assertNotIn("Transactions", anon)       # public pages show a plain header
+        self.assertIn("Log in", anon)
+
+    def test_stylesheet_has_light_dark_themes_and_reduced_motion(self):
+        css = open("core/static/core/css/app.css").read()
+        for needle in ['[data-theme=light]', 'prefers-color-scheme:light', 'prefers-reduced-motion', 'prefers-reduced-transparency', 'backdrop-filter', '--spring:linear(']:
+            self.assertIn(needle, css)
+        self.assertNotRegex(css, r"font-size:\d+px")                                   # type scales with the user's text-size setting
 
     def test_public_pages_and_footer(self):
         for name in ["help", "about", "privacy"]:
@@ -288,7 +319,7 @@ class AppTests(TestCase):
         Debt.objects.create(user=self.user, direction="lent", person="Karim", amount=200, due_date=today + timedelta(days=2))
         Debt.objects.create(user=self.user, direction="lent", person="Far", amount=200, due_date=today + timedelta(days=30))
         page = self.c.get(reverse("dashboard")).content.decode()
-        self.assertIn("Rahim", page); self.assertIn("Karim", page); self.assertNotIn("Far", page.split("Repayment reminders")[1].split("</details>")[0])
+        self.assertIn("Rahim", page); self.assertIn("Karim", page); self.assertNotIn("Far", page.split("<h4>Reminders</h4>")[1].split("All debts")[0])
         self.c.post(reverse("debt_pay", args=[late.pk]), {"amount": "999"})   # more than remaining: rejected
         self.assertEqual(late.payments.count(), 0)
         self.c.post(reverse("debt_pay", args=[late.pk]), {"amount": "500"})

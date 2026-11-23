@@ -104,6 +104,7 @@ PLANS = {
 # Real payment gateways (bKash/Nagad/SSLCommerz) are not wired yet. While this is
 # True, choosing a plan activates it immediately so the flow can be demoed.
 SITE_AUTHOR = os.environ.get("SITE_AUTHOR", "")  # optional footer credit; the team is credited on the About us page
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "")  # shown on the About & contact page when set
 PAYMENTS_DEMO_MODE = os.environ.get("PAYMENTS_DEMO_MODE", "1") == "1"
 
 AI_PRIMARY = os.environ.get("AI_PRIMARY", "gemini")

@@ -59,15 +59,16 @@
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-Chart.defaults.color = "#a1a1aa"; Chart.defaults.font.family = "Inter, sans-serif";
+Chart.defaults.color = cssVar("--muted"); Chart.defaults.font.family = "Inter, sans-serif";
 const D = JSON.parse(document.getElementById("daily-data").textContent);
-new Chart(document.getElementById("daily"), {type:"bar",
-  data:{labels:D.labels,datasets:[{label:"{% tr 'Expense' %}",data:D.expense,backgroundColor:"#fb923c",borderRadius:3},{label:"{% tr 'Income' %}",data:D.income,backgroundColor:"#4ade80",borderRadius:3}]},
-  options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}}},scales:{y:{grid:{color:"#27272c"},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false},ticks:{maxTicksLimit:15}}}}});
+const dailyChart = trackChart(new Chart(document.getElementById("daily"), {type:"bar",
+  data:{labels:D.labels,datasets:[{label:"{% tr 'Expense' %}",data:D.expense,backgroundColor:cssVar("--expense"),borderRadius:3},{label:"{% tr 'Income' %}",data:D.income,backgroundColor:cssVar("--income"),borderRadius:3}]},
+  options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{boxWidth:12}}},scales:{y:{grid:{color:cssVar("--line")},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false},ticks:{maxTicksLimit:15}}}}}));
 const P = JSON.parse(document.getElementById("donut-data").textContent);
-if (P.values.length) new Chart(document.getElementById("donut"), {type:"doughnut",
-  data:{labels:P.labels,datasets:[{data:P.values,backgroundColor:P.colors,borderColor:"#161619",borderWidth:2}]},
-  options:{cutout:"62%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c => " " + c.label + ": " + taka(c.parsed)}}}}});
+if (P.values.length) trackChart(new Chart(document.getElementById("donut"), {type:"doughnut",
+  data:{labels:P.labels,datasets:[{data:P.values,backgroundColor:P.colors,borderColor:"card",borderWidth:2}]},
+  options:{cutout:"62%",plugins:{legend:{display:false},tooltip:{callbacks:{label:c => " " + c.label + ": " + taka(c.parsed)}}}}}));
+const donutChart = Chart.getChart("donut"); if (donutChart) chartTheme(donutChart);
 const ta = document.getElementById("aitext");
 document.querySelectorAll(".examples button").forEach(b => b.onclick = () => { ta.value = b.textContent; ta.focus(); });
 ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && ta.value.trim()) { e.preventDefault(); document.getElementById("aiform").submit(); } });

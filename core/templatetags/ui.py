@@ -10,7 +10,9 @@ def tr(text):
     """{% tr "Dashboard" %} -> the Bangla text when the user's language is Bangla."""
     from ..i18n import tr as _tr
 
-    return _tr(text)
+    from django.utils.html import escape
+
+    return escape(_tr(text))  # template literals arrive marked safe, so escape explicitly
 
 
 def _group_bd(n):
