@@ -1,7 +1,7 @@
 # HishabAI — AI-powered personal expense tracker (Django)
 
 Bangla/English natural-language expense entry, dashboard, budgets & reports, AI assistant and a 30-day trial → paid plans.
-Stack: Django 5.2 · Neon Postgres · Vercel · Gemini + Grok (free-tier AI, automatic fallback).
+Stack: Django 5.2 · Neon Postgres · Vercel · Gemini + Groq (free-tier AI, automatic fallback).
 
 ## 1. Run locally
 
@@ -26,15 +26,15 @@ You need **at least one**. With both, if the first fails or hits its limit the a
 
 > Free-tier prompts may be used by Google to improve its products — keep that in mind for real users' financial data.
 
-### Grok (xAI)
-1. Go to https://console.x.ai and sign in.
-2. Open **API Keys** → **Create API key** → copy it → `GROK_API_KEY`.
-3. Model names are at https://docs.x.ai → set `GROK_MODEL` (default `grok-4-fast`).
+### Groq (free backup — no card)
+Groq is a different company from xAI's Grok; it runs open models (Llama) on a free tier.
+1. Go to https://console.groq.com and sign up (Google, GitHub or email).
+2. Open https://console.groq.com/keys → **Create API Key** → copy it (starts with `gsk_`; shown once) → `GROQ_API_KEY`.
+3. Default model is `llama-3.3-70b-versatile`; if it is retired, pick a current one from the console's *Models* page and set `GROQ_MODEL`.
 
-> **Caveat:** xAI's API is not reliably free. It has offered promotional / data-sharing credits, but that changes. Check **Billing** in the console to see if you have credits. If not, use Gemini as primary, or use **Groq** (a different company with a free tier, no card). It uses the same API format, so only env vars change:
-> `GROK_API_KEY=<key from https://console.groq.com/keys>` · `GROK_BASE_URL=https://api.groq.com/openai/v1` · `GROK_MODEL=llama-3.3-70b-versatile` (confirm the current model name on their site).
+> The Groq slot uses the OpenAI-style API, so `GROQ_BASE_URL`/`GROQ_MODEL` can also point to another compatible provider (e.g. xAI Grok with `https://api.x.ai/v1`, which is paid).
 
-`AI_PRIMARY=gemini` (or `grok`) picks which runs first. `AI_DAILY_LIMIT=60` caps AI calls per user per 24h so one user can't burn your free quota.
+`AI_PRIMARY=gemini` (or `groq`) picks which runs first. `AI_DAILY_LIMIT=60` caps AI calls per user per 24h so one user can't burn your free quota.
 
 ## 3. Neon database (free)
 1. https://neon.tech → sign up → **Create project** (Singapore is closest to Bangladesh).
@@ -68,8 +68,8 @@ gh repo create hishabai --private --source=. --push     # or create on github.co
 |---|---|
 | `SECRET_KEY` | `python -c "import secrets;print(secrets.token_urlsafe(50))"` |
 | `DATABASE_URL` | Neon pooled connection string |
-| `GEMINI_API_KEY` / `GROK_API_KEY` | from section 2 |
-| `AI_PRIMARY`, `GEMINI_MODEL`, `GROK_MODEL`, `GROK_BASE_URL` | optional (defaults: `gemini`, `gemini-flash-latest`, `grok-4-fast`, `https://api.x.ai/v1`) |
+| `GEMINI_API_KEY` / `GROQ_API_KEY` | from section 2 |
+| `AI_PRIMARY`, `GEMINI_MODEL`, `GROQ_MODEL`, `GROQ_BASE_URL` | optional (defaults: `gemini`, `gemini-flash-latest`, `llama-3.3-70b-versatile`, `https://api.groq.com/openai/v1`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional |
 | `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS` | only for a custom domain, e.g. `https://expense.example.com`, `expense.example.com` |
 

@@ -97,9 +97,9 @@ class AppTests(TestCase):
             with self.assertRaises(ai.AIQuotaExceeded):
                 ai.ask(self.user, "s", "p")
 
-    @override_settings(GEMINI_API_KEY="g", GROK_API_KEY="x", AI_PRIMARY="gemini")
+    @override_settings(GEMINI_API_KEY="g", GROQ_API_KEY="x", AI_PRIMARY="gemini")
     def test_fallback_to_second_provider(self):
-        with patch("core.ai._gemini", side_effect=ai.requests.ConnectionError()), patch("core.ai._grok", return_value="ok"):
+        with patch("core.ai._gemini", side_effect=ai.requests.ConnectionError()), patch("core.ai._groq", return_value="ok"):
             self.assertEqual(ai.ask(self.user, "s", "p"), "ok")
 
     def test_budgets_status_and_save(self):

@@ -1,7 +1,7 @@
-"""Thin AI layer: Gemini and Grok over plain HTTP, with automatic fallback.
+"""Thin AI layer: Gemini and Groq over plain HTTP, with automatic fallback.
 
-No SDKs on purpose - keeps the serverless bundle small. Grok uses the OpenAI-compatible
-chat-completions format, so GROK_BASE_URL/GROK_MODEL can also point at Groq, OpenRouter, etc.
+No SDKs on purpose - keeps the serverless bundle small. Groq uses the OpenAI-compatible
+chat-completions format, so GROQ_BASE_URL/GROQ_MODEL can also point at OpenRouter, xAI Grok, etc.
 """
 import json
 import re
@@ -43,17 +43,17 @@ def _gemini(system, prompt, json_mode):
     return "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
 
 
-def _grok(system, prompt, json_mode):
+def _groq(system, prompt, json_mode):
     body = {
-        "model": settings.GROK_MODEL,
+        "model": settings.GROQ_MODEL,
         "temperature": 0.2,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
     }
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     r = requests.post(
-        f"{settings.GROK_BASE_URL.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {settings.GROK_API_KEY}"},
+        f"{settings.GROQ_BASE_URL.rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
         json=body,
         timeout=TIMEOUT,
     )
@@ -65,8 +65,8 @@ def _providers():
     available = []
     if settings.GEMINI_API_KEY:
         available.append(("gemini", _gemini))
-    if settings.GROK_API_KEY:
-        available.append(("grok", _grok))
+    if settings.GROQ_API_KEY:
+        available.append(("groq", _groq))
     available.sort(key=lambda p: p[0] != settings.AI_PRIMARY)  # primary first, other = fallback
     return available
 
@@ -75,7 +75,7 @@ def ask(user, system, prompt, json_mode=False):
     """Call the primary provider, fall back to the other. Enforces a per-user daily cap."""
     providers = _providers()
     if not providers:
-        raise AIUnavailable("No AI key configured. Set GEMINI_API_KEY and/or GROK_API_KEY.")
+        raise AIUnavailable("No AI key configured. Set GEMINI_API_KEY and/or GROQ_API_KEY.")
     since = timezone.now() - timedelta(hours=24)
     if AICall.objects.filter(user=user, created_at__gte=since).count() >= settings.AI_DAILY_LIMIT:
         raise AIQuotaExceeded("Daily AI limit reached. Try again tomorrow.")
