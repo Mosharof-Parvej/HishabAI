@@ -1,0 +1,15 @@
+{% extends "core/admin_base.html" %}{% load ui %}
+{% block content %}
+<form class="card row wrap" style="margin-bottom:14px"><input name="q" value="{{ q }}" placeholder="Search email or name" style="max-width:260px">
+  <select name="status" style="width:170px"><option value="">All</option>{% for v, t in status_options %}<option value="{{ v }}" {% if status == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  <select name="sort" style="width:190px">{% for v, t in sort_options %}<option value="{{ v }}" {% if sort == v %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  <button class="btn primary">Show</button><span class="muted" style="margin-left:auto">{{ total }} user{{ total|pluralize }}</span></form>
+<div class="card" style="padding:0"><div style="overflow-x:auto"><table><thead><tr><th style="padding-left:16px">User</th><th>Joined</th><th>Last login</th><th class="right">Entries</th><th class="right">AI today</th><th style="padding-right:16px">Status</th></tr></thead>
+  {% for u in page %}<tr><td style="padding-left:16px"><a class="link" href="{% url 'admin_user' u.pk %}">{{ u.email }}</a><div class="sm muted">{{ u.name|default:"—" }}</div></td>
+    <td>{{ u.date_joined|date:"j M Y" }}</td><td class="muted">{% if u.last_login %}{{ u.last_login|timesince }} ago{% else %}never{% endif %}</td>
+    <td class="right">{{ u.entries }}</td><td class="right">{{ u.ai_today }}</td>
+    <td style="padding-right:16px">{% if u.is_active %}<span class="pill income">Active</span>{% else %}<span class="pill expense">Deactivated</span>{% endif %}{% if u.is_superuser %} <span class="pill warnp">Superuser</span>{% elif u.is_staff %} <span class="pill warnp">Staff</span>{% endif %}{% if u.is_paid %} <span class="pill income">{{ u.plan|title }}</span>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="6" class="muted" style="padding:20px 16px">No users match.</td></tr>{% endfor %}</table></div></div>
+{% if page.paginator.num_pages > 1 %}<div class="row between" style="margin-top:14px"><span class="sm muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  <span class="row">{% if page.has_previous %}<a class="btn sm" href="?{{ qs }}&page={{ page.previous_page_number }}">← Prev</a>{% endif %}{% if page.has_next %}<a class="btn sm" href="?{{ qs }}&page={{ page.next_page_number }}">Next →</a>{% endif %}</span></div>{% endif %}
+{% endblock %}

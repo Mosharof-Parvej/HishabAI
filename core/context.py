@@ -17,4 +17,8 @@ def shell(request):
         } for r in rems]
         ctx["ui_text"] = {k: i18n.tr(k) for k in ("Turn on notifications", "Notifications on", "Notifications blocked in browser settings")}
         ctx["ai_usage"] = services.ai_usage(request.user)
+        if request.user.is_staff:
+            from .models import PaymentRequest
+
+            ctx["pending_payments"] = PaymentRequest.objects.filter(status="pending").count()
     return ctx

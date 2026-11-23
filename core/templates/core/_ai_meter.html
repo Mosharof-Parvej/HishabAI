@@ -1,4 +1,4 @@
 {% load ui %}<div class="aimeter" data-limit="{{ ai_usage.limit }}">
-  <span class="sm">{% tr "AI today:" %} <b data-ai-pct>{{ ai_usage.pct }}</b>{% tr "% used" %} <span class="muted">· <span data-ai-used>{{ ai_usage.used }}</span> {% tr "of" %} {{ ai_usage.limit }} {% tr "requests" %}</span></span>
+  <span class="sm">{% tr "AI today:" %} <b data-ai-pct>{{ ai_usage.pct }}</b>{% tr "% used" %}</span>
   <div class="bar {% if ai_usage.pct >= 90 %}danger{% elif ai_usage.pct >= 70 %}warn{% endif %}"><i data-ai-bar style="width:{{ ai_usage.pct }}%"></i></div>
 </div>

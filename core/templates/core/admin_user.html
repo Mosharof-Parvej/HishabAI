@@ -1,0 +1,18 @@
+{% extends "core/admin_base.html" %}{% load ui %}
+{% block content %}
+<p style="margin-bottom:12px"><a class="link" href="{% url 'admin_users' %}">← All users</a></p>
+<div class="cols">
+  <div class="card"><div class="row" style="margin-bottom:12px"><span class="avatar" style="width:46px;height:46px;font-size:1.1rem">{{ u.initials|slice:":1" }}</span><div><b style="font-size:1.05rem">{{ u.email }}</b><div class="muted">{{ u.name|default:"No name" }}</div></div></div>
+    <div class="row wrap" style="margin-bottom:12px">{% if u.is_active %}<span class="pill income">Active</span>{% else %}<span class="pill expense">Deactivated</span>{% endif %}{% if u.is_superuser %}<span class="pill warnp">Superuser</span>{% elif u.is_staff %}<span class="pill warnp">Staff</span>{% endif %}{% if u.is_paid %}<span class="pill income">{{ u.plan|title }} until {{ u.paid_until|date:"j M Y" }}</span>{% elif u.has_access %}<span class="pill warnp">Trial · {{ u.trial_days_left }} days left</span>{% else %}<span class="pill expense">Trial ended</span>{% endif %}</div>
+    <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Joined</span><span>{{ u.date_joined|date:"j M Y, g:i a" }}</span></div>
+    <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Last login</span><span>{% if u.last_login %}{{ u.last_login|timesince }} ago{% else %}never{% endif %}</span></div>
+    <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Sign-in</span><span>{% if u.has_usable_password %}Email &amp; password{% else %}Google{% endif %}</span></div>
+    <div class="row between" style="padding:8px 0;border-top:1px solid var(--line)"><span class="muted">Language</span><span>{{ u.get_language_display }}</span></div>
+    {% if not u.is_superuser and u.pk != user.pk %}<form method="post" action="{% url 'admin_user_active' u.pk %}" style="margin-top:14px">{% csrf_token %}
+      <button class="btn {% if u.is_active %}danger{% else %}primary{% endif %}" onclick="return confirm('{% if u.is_active %}Deactivate this user? They will not be able to log in.{% else %}Reactivate this user?{% endif %}')">{% if u.is_active %}Deactivate user{% else %}Reactivate user{% endif %}</button></form>{% endif %}</div>
+  <div class="stack">
+    <div class="card"><h3 style="color:var(--text)">Activity (counts only)</h3>{% for label, n in stats %}<div class="row between" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>{{ label }}</span><b>{{ n }}</b></div>{% endfor %}</div>
+    <div class="card"><h3 style="color:var(--text)">Payments</h3>{% for p in payments %}<div class="row between" style="padding:9px 0;border-bottom:1px solid var(--line)"><span>{{ p.plan|title }} · {{ p.amount|taka }} · {{ p.get_method_display }}<div class="sm muted">{{ p.created_at|date:"j M Y" }}</div></span><span class="pill {% if p.status == 'approved' %}income{% elif p.status == 'rejected' %}expense{% else %}warnp{% endif %}">{{ p.get_status_display }}</span></div>{% empty %}<p class="muted">No payments.</p>{% endfor %}</div>
+  </div>
+</div>
+{% endblock %}

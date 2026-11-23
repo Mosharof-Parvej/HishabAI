@@ -51,3 +51,28 @@ def pct_cap(value):
         return min(100, max(0, int(value)))
     except (TypeError, ValueError):
         return 0
+
+
+@register.filter
+def dur(seconds):
+    """3 -> '3s', 125 -> '2m 05s', 3900 -> '1h 05m'."""
+    s = int(seconds or 0)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m {s % 60:02d}s"
+    return f"{s // 3600}h {s % 3600 // 60:02d}m"
+
+
+@register.filter
+def get(mapping, key):
+    return mapping.get(key, 0)
+
+
+@register.filter
+def num(value):
+    """26315 -> '26,315'"""
+    try:
+        return f"{int(value):,}"
+    except (TypeError, ValueError):
+        return value

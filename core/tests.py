@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import ai
-from .models import AICall, Account, Budget, Category, Debt, DebtPayment, Transaction, User
+from .models import AICall, Account, Budget, Category, Debt, DebtPayment, PaymentRequest, Transaction, User
 
 
 class AppTests(TestCase):
@@ -226,11 +226,12 @@ class AppTests(TestCase):
         self.user.is_staff = True; self.user.is_superuser = True; self.user.save()
         self.assertIn('href="/admin/"', self.c.get(reverse("dashboard")).content.decode())
         for model in ["user", "transaction", "account", "debt", "aicall", "category", "budget", "debtpayment"]:
-            self.assertEqual(self.c.get(f"/admin/core/{model}/").status_code, 200, model)
-        self.assertEqual(self.c.get(f"/admin/core/user/{self.user.pk}/change/").status_code, 200)
-        self.assertEqual(self.c.get("/admin/core/user/add/").status_code, 403)         # signup happens on the site
+            self.assertEqual(self.c.get(f"/manage/core/{model}/").status_code, 200, model)
+        self.assertEqual(self.c.get(f"/manage/core/user/{self.user.pk}/change/").status_code, 200)
+        self.assertEqual(self.c.get("/manage/core/user/add/").status_code, 403)         # signup happens on the site
         other = Client(); other.force_login(User.objects.create_user("n@example.com", "s3cret-pass-9"))
-        self.assertEqual(other.get("/admin/").status_code, 302)                         # normal users cannot enter
+        self.assertEqual(other.get("/admin/").status_code, 404)                         # the panel does not exist for normal users
+        self.assertEqual(other.get("/manage/").status_code, 302)
 
     def test_bell_has_notification_payload_and_anonymous_header(self):
         today = timezone.localdate()
@@ -453,11 +454,214 @@ class AppTests(TestCase):
         body = self.c.get(reverse("transactions_csv")).content.decode()
         self.assertIn("'=HYPERLINK", body)
 
-    def test_subscription_demo(self):
-        self.c.post(reverse("subscription_choose"), {"plan": "yearly"})
+    PAY = {"bkash": {"number": "01700000000", "holder": "HishabAI", "kind": "Personal"}, "nagad": {"number": "", "holder": "", "kind": ""},
+           "rocket": {"number": "01800000000-5", "holder": "", "kind": "Personal"},
+           "bank": {"bank": "City Bank", "holder": "HishabAI Ltd", "number": "1234567890", "branch": "Dhanmondi", "routing": "225260000"}}
+
+    @staticmethod
+    def _png(size=(120, 80), color=(10, 150, 90)):
+        from io import BytesIO
+
+        from PIL import Image
+        buf = BytesIO(); Image.new("RGB", size, color).save(buf, "PNG"); return buf.getvalue()
+
+    def _pay(self, **over):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        data = {"plan": "monthly", "method": "bkash", "name": "Nusrat J", "phone": "01711111111", "email": "n@example.com",
+                "sender_number": "01711111111", "transaction_id": "TX123", "note": "",
+                "screenshot": SimpleUploadedFile("pay.png", self._png(), content_type="image/png")}
+        data.update(over)
+        return self.c.post(reverse("payment_start"), {k: v for k, v in data.items() if v is not None})
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_payment_page_shows_only_configured_accounts(self):
+        page = self.c.get(reverse("payment_start") + "?plan=yearly")
+        self.assertContains(page, "01700000000"); self.assertContains(page, "01800000000-5")      # bKash, Rocket
+        self.assertContains(page, "City Bank"); self.assertContains(page, "1234567890")           # bank details
+        self.assertNotContains(page, ">Nagad<")                                                  # not configured -> hidden
+        self.assertContains(page, "৳1,299")
+        self.assertRedirects(self.c.get(reverse("payment_start") + "?plan=bogus"), reverse("subscription"))
+        self.assertContains(self.c.get(reverse("subscription")), "Take subscription")
+        with self.settings(PAYMENT_ACCOUNTS={k: {} for k in self.PAY}):
+            self.assertContains(self.c.get(reverse("subscription")), "haven’t been set up")
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_submit_payment_proof_creates_pending_request_and_compresses_screenshot(self):
+        r = self._pay()
+        self.assertRedirects(r, reverse("subscription"))
+        p = PaymentRequest.objects.get()
+        self.assertEqual((p.status, p.plan, p.amount, p.method, p.transaction_id, p.email), ("pending", "monthly", 149, "bkash", "TX123", "n@example.com"))
+        self.assertTrue(bytes(p.screenshot).startswith(b"\xff\xd8"))                             # stored as JPEG
+        self.user.refresh_from_db(); self.assertFalse(self.user.is_paid)                        # nothing activates until staff approve
+        self.assertContains(self.c.get(reverse("subscription")), "Pending review")
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_payment_validation(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bad = [dict(screenshot=None), dict(screenshot=SimpleUploadedFile("x.png", b"not an image at all" * 50, content_type="image/png")),
+               dict(phone="abc"), dict(email="nope"), dict(name=""), dict(method="nagad"), dict(method="visa"),
+               dict(screenshot=SimpleUploadedFile("big.png", b"0" * 4_100_000, content_type="image/png"))]
+        for over in bad:
+            self.assertContains(self._pay(**over), 'class="msg error"')
+        self.assertEqual(PaymentRequest.objects.count(), 0)
+        self._pay(transaction_id="")                                                            # transaction id is optional
+        self.assertEqual(PaymentRequest.objects.count(), 1)
+        self._pay(transaction_id="DUP1")
+        self.assertContains(self._pay(transaction_id="dup1"), "already been submitted")         # same id twice (any case)
+        self._pay(transaction_id="")
+        self.assertContains(self._pay(transaction_id="NEW"), "waiting for review")              # pending cap of 3
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_screenshot_is_private_to_owner_and_staff(self):
+        self._pay()
+        p = PaymentRequest.objects.get(); url = reverse("payment_screenshot", args=[p.pk])
+        self.assertEqual(self.c.get(url)["Content-Type"], "image/jpeg")
+        other = Client(); other.force_login(User.objects.create_user("o@example.com", "s3cret-pass-9"))
+        self.assertEqual(other.get(url).status_code, 404)
+        self.assertEqual(Client().get(url).status_code, 302)
+        staff = Client(); staff.force_login(User.objects.create_user("s@example.com", "s3cret-pass-9", is_staff=True))
+        self.assertEqual(staff.get(url).status_code, 200)
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_admin_approves_once_and_plan_extends_not_resets(self):
+        self._pay(); self._pay(transaction_id="B", plan="yearly")
+        admin = User.objects.create_user("a@x.com", "s3cret-pass-9", is_staff=True, is_superuser=True)
+        ac = Client(); ac.force_login(admin)
+        self.assertContains(ac.get("/manage/core/paymentrequest/"), "TX123")
+        monthly, yearly = PaymentRequest.objects.order_by("id")
+        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [monthly.pk]})
+        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [monthly.pk]})   # twice: no double credit
+        self.user.refresh_from_db(); first_end = self.user.paid_until
+        self.assertTrue(self.user.is_paid); self.assertEqual(self.user.plan, "monthly")
+        self.assertAlmostEqual((first_end - timezone.now()).days, 30, delta=1)
+        ac.post("/manage/core/paymentrequest/", {"action": "approve", "_selected_action": [yearly.pk]})
         self.user.refresh_from_db()
-        self.assertTrue(self.user.is_paid)
-        self.assertEqual(self.user.plan, "yearly")
+        self.assertAlmostEqual((self.user.paid_until - first_end).days, 365, delta=1)             # added after the paid period
+        monthly.refresh_from_db(); self.assertEqual((monthly.status, monthly.reviewed_by), ("approved", admin))
+        # reject path + final state
+        self._pay(transaction_id="C"); third = PaymentRequest.objects.get(transaction_id="C")
+        ac.post("/manage/core/paymentrequest/", {"action": "reject", "_selected_action": [third.pk]})
+        third.refresh_from_db(); self.assertEqual(third.status, "rejected"); self.assertTrue(third.admin_note)
+        before = User.objects.get(pk=self.user.pk).paid_until
+        third.review("approved", admin)                                                          # cannot flip a reviewed payment
+        self.assertEqual((third.status, User.objects.get(pk=self.user.pk).paid_until), ("rejected", before))
+        self.assertContains(self.c.get(reverse("subscription")), "Rejected")
+        # staff see a pending badge in the menu; normal users do not
+        self._pay(transaction_id="D")
+        self.assertEqual(ac.get(reverse("dashboard")).context["pending_payments"], 1)
+        self.assertNotIn("pending_payments", self.c.get(reverse("dashboard")).context)
+
+    # ------------------------------------------------------------ admin panel
+    def _staff(self, **kw):
+        u = User.objects.create_user("staff@example.com", "s3cret-pass-9", is_staff=True, **kw)
+        c = Client(); c.force_login(u); return u, c
+
+    def test_admin_panel_is_staff_only(self):
+        for name in ["admin_overview", "admin_users", "admin_payments"]:
+            self.assertEqual(self.c.get(reverse(name)).status_code, 404, name)      # a normal user gets a 404
+            self.assertEqual(Client().get(reverse(name)).status_code, 302, name)    # anonymous -> login
+        self.assertEqual(self.c.get(reverse("admin_user", args=[self.user.pk])).status_code, 404)
+        self.assertEqual(self.c.post(reverse("admin_user_active", args=[self.user.pk])).status_code, 404)
+        staff, sc = self._staff()
+        for name in ["admin_overview", "admin_users", "admin_payments"]:
+            self.assertEqual(sc.get(reverse(name)).status_code, 200, name)
+        self.assertContains(sc.get(reverse("admin_overview")), "Counts only")
+
+    def test_visitor_tracking_counts_guests_and_users_but_not_staff_or_bots(self):
+        from .models import VisitorDay
+        browser = {"HTTP_USER_AGENT": "Mozilla/5.0 Chrome"}
+        g = Client()
+        r = g.get(reverse("login"), **browser)
+        key = r.cookies["hv"].value
+        g.get(reverse("login"), **browser)                                           # same visitor, second page view
+        self.assertEqual(VisitorDay.objects.get().views, 2)
+        Client().get(reverse("login"), HTTP_USER_AGENT="Googlebot/2.1")              # bots are ignored
+        Client().get(reverse("login"))                                               # no user agent -> ignored
+        self.assertEqual(VisitorDay.objects.count(), 1)
+        self.c.get(reverse("dashboard"), **browser)                                  # a logged-in user is recorded with their id
+        self.assertEqual(VisitorDay.objects.filter(user=self.user).count(), 1)
+        _, sc = self._staff(); sc.get(reverse("dashboard"), **browser)               # staff are not counted
+        self.assertEqual(VisitorDay.objects.count(), 2)
+        self.assertEqual(g.post(reverse("api_ping"), {"s": "15"}, **browser).status_code, 204)   # heartbeat adds time
+        g.post(reverse("api_ping"), {"s": "999"}, **browser)                         # capped at 30 s per ping
+        self.assertEqual(VisitorDay.objects.get(key=key).seconds, 45)
+        Client().post(reverse("api_ping"), {"s": "15"}, **browser)                   # no cookie -> nothing recorded
+        self.assertEqual(sum(VisitorDay.objects.values_list("seconds", flat=True)), 45)
+
+    def test_overview_numbers(self):
+        from .models import VisitorDay
+        today = timezone.localdate()
+        VisitorDay.objects.create(day=today, key="a" * 24, user=self.user, views=3, seconds=125)
+        VisitorDay.objects.create(day=today, key="b" * 24, views=1, seconds=15)
+        AICall.objects.create(user=self.user, kind="entry", tokens=1200, provider="gemini")
+        AICall.objects.create(user=self.user, kind="voice", provider="groq")
+        Transaction.objects.create(user=self.user, kind="expense", amount=5, ai_generated=True)
+        Transaction.objects.create(user=self.user, kind="expense", amount=5)
+        Debt.objects.create(user=self.user, direction="lent", person="X", amount=1)
+        _, sc = self._staff()
+        s = sc.get(reverse("admin_overview")).context["s"]
+        self.assertEqual((s["visitors"], s["logged"], s["guests"], s["views"]), (2, 1, 1, 4))
+        self.assertEqual((s["total_secs"], s["avg_secs"], s["avg_secs_logged"]), (140, 70, 125))
+        self.assertEqual((s["ai"]["n"], s["ai"]["t"], s["ai"]["n_cap"]), (2, 1200, 400))
+        self.assertEqual(s["top_ai"][0]["email"], "a@example.com"); self.assertEqual(s["top_ai"][0]["n"], 2)
+        self.assertEqual(sum(s["charts"]["with_ai"]), 1); self.assertEqual(sum(s["charts"]["by_hand"]), 1); self.assertEqual(sum(s["charts"]["debts"]), 1)
+        self.assertEqual(len(s["charts"]["labels"]), 30)
+        self.assertEqual(s["users_total"], 2); self.assertEqual(s["adding"], 1)
+        from .templatetags.ui import dur
+        self.assertEqual((dur(3), dur(125), dur(3900)), ("3s", "2m 05s", "1h 05m"))
+
+    @patch("core.ai._groq", return_value=ai._with_tokens("hello", 321))
+    def test_ai_records_tokens_and_app_wide_caps_stop_everyone(self, _):
+        with override_settings(GROQ_API_KEY="k", GEMINI_API_KEY=""):
+            self.assertEqual(ai.ask(self.user, "s", "p", kind="ask"), "hello")
+            call = AICall.objects.get()
+            self.assertEqual((call.kind, call.provider, call.tokens), ("ask", "groq", 321))
+            with override_settings(AI_APP_DAILY_REQUESTS=1):
+                other = User.objects.create_user("o@example.com", "s3cret-pass-9")
+                with self.assertRaisesMessage(ai.AIQuotaExceeded, "everyone"):
+                    ai.ask(other, "s", "p")
+            with override_settings(AI_APP_DAILY_TOKENS=300):
+                with self.assertRaises(ai.AIQuotaExceeded):
+                    ai.ask(self.user, "s", "p")
+
+    def test_users_list_filter_search_sort_and_deactivate(self):
+        _, sc = self._staff()
+        quiet = User.objects.create_user("quiet@example.com", "s3cret-pass-9", name="Quiet One")
+        Transaction.objects.create(user=self.user, kind="expense", amount=1); Transaction.objects.create(user=self.user, kind="expense", amount=1)
+        emails = lambda **q: [u.email for u in sc.get(reverse("admin_users"), q).context["page"]]
+        self.assertEqual(set(emails()), {"a@example.com", "quiet@example.com", "staff@example.com"})
+        self.assertEqual(emails(q="quiet one"), ["quiet@example.com"])
+        self.assertEqual(emails(sort="entries")[0], "a@example.com")
+        self.assertEqual(emails(status="staff"), ["staff@example.com"])
+        self.assertContains(sc.get(reverse("admin_user", args=[quiet.pk])), "quiet@example.com")
+        sc.post(reverse("admin_user_active", args=[quiet.pk]))
+        quiet.refresh_from_db(); self.assertFalse(quiet.is_active)
+        self.assertEqual(emails(status="deactivated"), ["quiet@example.com"])
+        self.assertFalse(Client().login(username="quiet@example.com", password="s3cret-pass-9"))      # cannot log in any more
+        sc.post(reverse("admin_user_active", args=[quiet.pk])); quiet.refresh_from_db(); self.assertTrue(quiet.is_active)
+        staff = User.objects.get(email="staff@example.com")
+        sc.post(reverse("admin_user_active", args=[staff.pk])); staff.refresh_from_db(); self.assertTrue(staff.is_active)   # not yourself
+        boss = User.objects.create_user("boss@example.com", "s3cret-pass-9", is_superuser=True)
+        sc.post(reverse("admin_user_active", args=[boss.pk])); boss.refresh_from_db(); self.assertTrue(boss.is_active)         # not a superuser
+
+    @override_settings(PAYMENT_ACCOUNTS=PAY)
+    def test_review_payments_in_the_admin_panel(self):
+        self._pay(); self._pay(transaction_id="B")
+        _, sc = self._staff()
+        first, second = PaymentRequest.objects.order_by("id")
+        page = sc.get(reverse("admin_payments"))
+        self.assertContains(page, "TX123"); self.assertContains(page, reverse("payment_screenshot", args=[first.pk]))
+        self.assertEqual(sc.get(reverse("admin_overview")).context["s"]["pending_payments"], 2)
+        sc.post(reverse("admin_payment_review", args=[first.pk]), {"action": "approve"})
+        self.user.refresh_from_db(); self.assertTrue(self.user.is_paid); self.assertEqual(self.user.plan, "monthly")
+        end = self.user.paid_until
+        sc.post(reverse("admin_payment_review", args=[first.pk]), {"action": "approve"})        # twice -> no double credit
+        self.user.refresh_from_db(); self.assertEqual(self.user.paid_until, end)
+        sc.post(reverse("admin_payment_review", args=[second.pk]), {"action": "reject", "note": "Amount did not match"})
+        second.refresh_from_db(); self.assertEqual((second.status, second.admin_note), ("rejected", "Amount did not match"))
+        self.assertContains(self.c.get(reverse("subscription")), "Amount did not match")        # the user sees why
+        self.assertEqual(self.c.post(reverse("admin_payment_review", args=[second.pk]), {"action": "approve"}).status_code, 404)  # normal users can't review
+        self.assertEqual(len(sc.get(reverse("admin_payments"), {"status": "approved"}).context["page"]), 1)
 
     def test_taka_filter_uses_bd_grouping(self):
         from .templatetags.ui import taka

@@ -1,0 +1,44 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}Take subscription{% endblock %}
+{% block heading %}Take subscription{% endblock %}
+{% block sub %}{{ plan.label }} plan · {{ plan.price|taka }} — pay, then send us the proof{% endblock %}
+{% block content %}
+<div class="cols">
+  <div class="card"><h3 style="color:var(--text)">① Send {{ plan.price|taka }} to any of these accounts</h3>
+    <p class="sm muted" style="margin-bottom:12px">Use <b>Send Money</b> (bKash / Nagad / Rocket) or a bank transfer. Send exactly <b>{{ plan.price|taka }}</b>.</p>
+    {% for m in methods %}<div class="pay-method">
+      <div class="row">{% if m.logo %}<img class="lg big" src="{{ m.logo }}" alt="">{% else %}<span class="lg big fb">{{ m.name|slice:":1" }}</span>{% endif %}<b style="font-size:1rem">{{ m.name }}</b></div>
+      <dl class="paylines">{% for label, value in m.lines %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
+      <button type="button" class="btn sm outline" data-copy="{{ m.copy }}">Copy number</button></div>
+    {% empty %}<p class="muted">Payment accounts haven’t been set up yet. Please check back soon.</p>{% endfor %}
+  </div>
+  <div class="card"><h3 style="color:var(--text)">② Submit your payment proof</h3>
+    {% if errors %}<div class="msg error" style="margin-bottom:14px"><ul style="margin:0;padding-left:18px">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+    <form method="post" enctype="multipart/form-data" id="payform">{% csrf_token %}<input type="hidden" name="plan" value="{{ plan_key }}">
+      <div class="field"><label>Which account did you pay?</label><select name="method" required>{% for m in methods %}<option value="{{ m.key }}" {% if v.method == m.key %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div class="field"><label>Your name</label><input name="name" required maxlength="80" value="{{ v.name }}"></div>
+        <div class="field"><label>Phone number</label><input name="phone" type="tel" required maxlength="20" placeholder="01XXXXXXXXX" value="{{ v.phone }}"></div>
+        <div class="field"><label>Email address</label><input name="email" type="email" required value="{{ v.email }}"></div>
+        <div class="field"><label>Number / account you paid from <span class="muted">(optional)</span></label><input name="sender_number" maxlength="40" placeholder="01XXXXXXXXX" value="{{ v.sender_number }}"></div></div>
+      <div class="field"><label>Transaction ID <span class="muted">(optional, helps us verify faster)</span></label><input name="transaction_id" maxlength="60" placeholder="e.g. 9H7ABC1234" value="{{ v.transaction_id }}"></div>
+      <div class="field"><label>Payment screenshot</label><input name="screenshot" id="shot" type="file" accept="image/png,image/jpeg,image/webp" required>
+        <p class="sm muted" style="margin-top:5px">PNG or JPG, up to {{ max_mb }} MB. Show the amount, the date and the transaction ID.</p>
+        <img id="preview" alt="" hidden style="max-width:200px;border-radius:10px;margin-top:8px;border:1px solid var(--line)"></div>
+      <div class="field"><label>Note <span class="muted">(optional)</span></label><input name="note" maxlength="300" value="{{ v.note }}"></div>
+      <button class="btn primary block" id="paybtn">Submit payment</button>
+      <p class="sm muted" style="margin-top:10px;text-align:center">We’ll verify it and activate your plan — usually within a few hours.</p>
+    </form></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const shot = document.getElementById("shot"), prev = document.getElementById("preview");
+shot.addEventListener("change", () => {
+  const f = shot.files[0]; if (!f) { prev.hidden = true; return; }
+  if (f.size > {{ max_mb }} * 1000000) { alert("That screenshot is over {{ max_mb }} MB. Please choose a smaller one."); shot.value = ""; prev.hidden = true; return; }
+  prev.src = URL.createObjectURL(f); prev.hidden = false;
+});
+document.getElementById("payform").addEventListener("submit", () => { const b = document.getElementById("paybtn"); b.disabled = true; b.textContent = "Uploading…"; });
+</script>
+{% endblock %}

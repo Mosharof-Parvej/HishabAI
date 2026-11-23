@@ -132,12 +132,18 @@ def ai_context(user, today):
 
 # ---------------------------------------------------------------- AI usage
 
-def ai_usage(user):
-    """AI calls in the last 24h vs the per-user daily cap (the same window the cap itself enforces)."""
-    from django.conf import settings
+def day_start():
+    """Midnight today in the app's time zone (Asia/Dhaka). AI allowances reset here."""
     from django.utils import timezone
 
-    used = AICall.objects.filter(user=user, created_at__gte=timezone.now() - timedelta(hours=24)).count()
+    return timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def ai_usage(user):
+    """AI calls made today vs the per-user daily cap (the same window the cap itself enforces)."""
+    from django.conf import settings
+
+    used = AICall.objects.filter(user=user, created_at__gte=day_start()).count()
     limit = settings.AI_DAILY_LIMIT
     return {"used": used, "limit": limit, "pct": min(100, round(used / limit * 100)) if limit else 0}
 

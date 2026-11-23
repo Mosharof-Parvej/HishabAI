@@ -1,0 +1,4 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}Admin panel{% endblock %}
+{% block header %}<h1>Admin panel</h1><p class="muted" style="margin-top:4px">Counts only: users' amounts and what they typed are never shown here.</p>
+  <div class="seg" style="margin-top:12px"><a href="{% url 'admin_overview' %}" class="{% if tab == 'overview' %}on{% endif %}">Overview</a><a href="{% url 'admin_users' %}" class="{% if tab == 'users' %}on{% endif %}">Users</a><a href="{% url 'admin_payments' %}" class="{% if tab == 'payments' %}on{% endif %}">Payments{% if pending_payments %}<span class="count" style="margin-left:6px">{{ pending_payments }}</span>{% endif %}</a></div>{% endblock %}

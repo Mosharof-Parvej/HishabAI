@@ -1,0 +1,60 @@
+{% extends "core/admin_base.html" %}{% load ui %}
+{% block content %}
+{% if s.pending_payments %}<a href="{% url 'admin_payments' %}" class="notice" style="display:block;margin-bottom:14px">💳 <b>{{ s.pending_payments }} payment{{ s.pending_payments|pluralize }} waiting for review</b> — open Payments →</a>{% endif %}
+<div class="grid g4" style="margin-bottom:8px">
+  <div class="card stat"><div class="lbl"><b>Visitors today</b></div><div class="val">{{ s.visitors }}</div><span class="sm muted">{{ s.logged }} logged in · {{ s.guests }} guest{{ s.guests|pluralize }} · {{ s.views }} page view{{ s.views|pluralize }}</span></div>
+  <div class="card stat"><div class="lbl"><b>Users who visited</b></div><div class="val">{{ s.seen.today }}</div><span class="sm muted">today · {{ s.seen.7 }} in 7 days · {{ s.seen.30 }} in 30 days</span></div>
+  <div class="card stat"><div class="lbl"><b>Average time today</b></div><div class="val">{{ s.avg_secs|dur }}</div><span class="sm muted">per visitor · {{ s.avg_secs_logged|dur }} per logged-in user</span></div>
+  <div class="card stat"><div class="lbl"><b>Total time today</b></div><div class="val">{{ s.total_secs|dur }}</div><span class="sm muted">everyone added together</span></div>
+</div>
+<p class="sm muted" style="margin-bottom:14px">Time counts only while a tab is open, visible and in use, so it's an estimate. Staff aren't counted.</p>
+<div class="grid g4" style="margin-bottom:14px">
+  <div class="card stat"><div class="lbl"><b>Users</b></div><div class="val">{{ s.users_total }}</div><span class="sm muted">{{ s.google }} via Google</span></div>
+  <div class="card stat"><div class="lbl"><b>New sign-ups</b></div><div class="val">{{ s.new_7 }}</div><span class="sm muted">last 7 days · {{ s.new_today }} today · {{ s.new_30 }} in 30 days</span></div>
+  <div class="card stat"><div class="lbl"><b>Users adding data</b></div><div class="val">{{ s.adding }}</div><span class="sm muted">added an entry or used AI in the last 7 days</span></div>
+  <div class="card stat"><div class="lbl"><b>Deactivated</b></div><div class="val">{{ s.deactivated }}</div><span class="sm muted">can't log in</span></div>
+</div>
+<div class="cols" style="margin-bottom:14px">
+  <div class="card"><h3 style="color:var(--text)">AI today (whole app)</h3>
+    <div class="row between"><span>Requests</span><b>{{ s.ai.n|num }} / {{ s.ai.n_cap|num }}</b></div><div class="bar {% if s.ai.n_pct >= 90 %}danger{% elif s.ai.n_pct >= 70 %}warn{% endif %}"><i style="width:{{ s.ai.n_pct }}%"></i></div>
+    <div class="row between" style="margin-top:10px"><span>Tokens</span><b>{{ s.ai.t|num }} / {{ s.ai.t_cap|num }}</b></div><div class="bar {% if s.ai.t_pct >= 90 %}danger{% elif s.ai.t_pct >= 70 %}warn{% endif %}"><i style="width:{{ s.ai.t_pct }}%"></i></div>
+    <p class="sm muted" style="margin-top:12px">AI stops for everyone when either bar is full; it resets at midnight (Bangladesh time). Each user may make {{ ai_user_limit }} requests a day.</p></div>
+  <div class="card"><h3 style="color:var(--text)">Top AI users today</h3>
+    {% for r in s.top_ai %}<div class="row between" style="padding:7px 0;border-bottom:1px solid var(--line)"><span>{{ r.email }}</span><span class="sm muted">{{ r.n }} request{{ r.n|pluralize }} · {{ r.t|num }} tokens</span></div>
+    {% empty %}<p class="muted" style="text-align:center;padding:26px 0">Nobody has used AI today yet.</p>{% endfor %}</div>
+</div>
+<div class="cols" style="margin-bottom:14px">
+  <div class="card"><h3 style="color:var(--text)">Visitors · last 30 days</h3><div class="chart-box"><canvas id="c-visitors"></canvas></div></div>
+  <div class="card"><h3 style="color:var(--text)">Average minutes per visitor · last 30 days</h3><div class="chart-box"><canvas id="c-avg"></canvas></div></div>
+</div>
+<div class="cols" style="margin-bottom:14px">
+  <div class="card"><h3 style="color:var(--text)">New sign-ups · last 30 days</h3><div class="chart-box"><canvas id="c-signups"></canvas></div></div>
+  <div class="card"><h3 style="color:var(--text)">AI requests · last 30 days</h3><div class="chart-box"><canvas id="c-ai"></canvas></div></div>
+</div>
+<div class="card" style="margin-bottom:14px"><h3 style="color:var(--text)">Entries added per day · last 30 days</h3><div class="chart-box" style="height:260px"><canvas id="c-entries"></canvas></div></div>
+<div class="cols">
+  <div class="card"><h3 style="color:var(--text)">What people use · last 30 days</h3>
+    {% for label, n in s.usage %}<div class="budget-row"><div class="row between"><span>{{ label }}</span><b>{{ n }}</b></div><div class="bar"><i style="width:{% if usage_max %}{% widthratio n usage_max 100 %}{% else %}0{% endif %}%"></i></div></div>{% endfor %}</div>
+  <div class="card"><h3 style="color:var(--text)">All time</h3>
+    {% for label, n in s.all_time %}<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line)"><span>{{ label }}</span><b>{{ n }}</b></div>{% endfor %}
+    {% if user.is_superuser %}<p style="margin-top:12px"><a class="link sm" href="/manage/">Open the database admin →</a></p>{% endif %}</div>
+</div>
+{{ s.charts|json_script:"charts" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+Chart.defaults.color = cssVar("--muted"); Chart.defaults.font.family = "Inter, sans-serif";
+const C = JSON.parse(document.getElementById("charts").textContent), L = C.labels;
+const grid = () => ({color: cssVar("--line")}), tick = {maxTicksLimit: 12, maxRotation: 50};
+const bar = (id, sets, stacked, legend) => trackChart(new Chart(document.getElementById(id), {type: "bar", data: {labels: L, datasets: sets.map(d => ({borderRadius: 3, ...d, backgroundColor: cssVar(d.cssBg)}))},
+  options: {maintainAspectRatio: false, plugins: {legend: {display: legend, position: "bottom", labels: {boxWidth: 12}}}, scales: {x: {stacked, grid: {display: false}, ticks: tick}, y: {stacked, beginAtZero: true, grid: grid(), ticks: {precision: 0}}}}}));
+const line = (id, data, label) => trackChart(new Chart(document.getElementById(id), {type: "line", data: {labels: L, datasets: [{label, data, cssBorder: "--income", borderColor: cssVar("--income"), cssBg: "--primary-50", backgroundColor: cssVar("--primary-50"), fill: true, tension: .35, pointRadius: 2}]},
+  options: {maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {x: {grid: {display: false}, ticks: tick}, y: {beginAtZero: true, grid: grid(), ticks: {precision: 0}}}}}));
+bar("c-visitors", [{label: "Logged in", data: C.logged, cssBg: "--primary"}, {label: "Guests", data: C.guests, cssBg: "--info"}], true, true);
+line("c-avg", C.avg_min, "Minutes");
+bar("c-signups", [{label: "Sign-ups", data: C.signups, cssBg: "--primary"}], false, false);
+line("c-ai", C.ai, "AI requests");
+bar("c-entries", [{label: "With AI", data: C.with_ai, cssBg: "--primary"}, {label: "By hand", data: C.by_hand, cssBg: "--info"}, {label: "Debts", data: C.debts, cssBg: "--warn"}], true, true);
+</script>
+{% endblock %}

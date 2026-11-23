@@ -240,3 +240,9 @@ html.theming *,html.theming *::before,html.theming *::after{transition:backgroun
 @media print{:root,:root[data-theme]{--bg:#fff;--card:#fff;--card2:#f4f4f5;--line:#e4e4e7;--text:#111;--muted:#52525b;--income:#047857;--expense:#be123c;--field:#fff;--primary:#047857}
   .side,.top-r,.no-print,.foot{display:none!important}.app{display:block}main{padding:0}body{background:#fff}.card{break-inside:avoid}}
 .micwrap button svg,.mic svg{width:18px;height:18px;display:block;margin:auto}.micwrap button,.mic{display:grid;place-items:center}
+/* payments */
+.pay-method{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--card2)}
+.paylines{margin:12px 0;display:grid;gap:6px}.paylines div{display:flex;justify-content:space-between;gap:12px;font-size:.8125rem}
+.paylines dt{color:var(--muted)}.paylines dd{margin:0;font-weight:600;text-align:right;word-break:break-all;font-variant-numeric:tabular-nums}
+.btn.disabled{opacity:.5;pointer-events:none}
+code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:.8125rem}

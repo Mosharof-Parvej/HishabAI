@@ -78,10 +78,28 @@ gh repo create hishabai --private --source=. --push     # or create on github.co
 
 Never set `DEBUG=1` in production.
 
-## 7. Before charging real customers
-- **Payments are a demo.** `PAYMENTS_DEMO_MODE=1` (default) activates a plan instantly without taking money. Integrate a gateway (SSLCommerz, bKash, Nagad…), activate plans from its verified webhook, then set `PAYMENTS_DEMO_MODE=0`.
+## 7. Taking payments (manual: bKash / Nagad / Rocket / bank)
+Users press **Take subscription**, see your account details, send the money, then upload a screenshot with their name, email, phone and (optionally) transaction ID.
+You review it in **Admin panel → Payments** and press **Approve** to activate their plan. Add your details as Vercel environment variables (only the ones you set are shown):
+
+| Name | Example |
+|---|---|
+| `PAY_BKASH`, `PAY_BKASH_NAME`, `PAY_BKASH_TYPE` | `01XXXXXXXXX`, `Your Name`, `Personal` |
+| `PAY_NAGAD`, `PAY_NAGAD_NAME`, `PAY_NAGAD_TYPE` | `01XXXXXXXXX`, … |
+| `PAY_ROCKET`, `PAY_ROCKET_NAME`, `PAY_ROCKET_TYPE` | `01XXXXXXXXX-X`, … |
+| `PAY_BANK_NAME`, `PAY_BANK_ACCOUNT_NAME`, `PAY_BANK_ACCOUNT_NO`, `PAY_BANK_BRANCH`, `PAY_BANK_ROUTING` | `City Bank`, … |
+
+Screenshots are re-encoded as small JPEGs and stored in the database (Vercel's disk is read-only); only the owner and staff can open them.
+Making someone staff (so they see **Admin panel**): `python manage.py shell -c "from core.models import User; User.objects.filter(email='you@example.com').update(is_staff=True, is_superuser=True)"` (with `DATABASE_URL` set).
+
+## 8. Admin panel
+`/admin/` (staff only): visitors and time on site, sign-ups, AI usage (requests and tokens, whole app and top users), entries per day, a Users list (search, filter, deactivate) and Payments review. It shows counts only, never users' amounts or what they typed.
+AI limits that protect the free tiers: `AI_DAILY_LIMIT` (per user per day), `AI_APP_DAILY_REQUESTS` (default 400) and `AI_APP_DAILY_TOKENS` (default 1,000,000) for the whole app; they reset at midnight Bangladesh time.
+Django's own database admin lives at `/manage/` (superusers).
+
+## 9. Before going fully live
 - Free AI tiers have rate limits and no SLA; use a paid key for real traffic.
-- Add a privacy policy: transaction text goes to Google/xAI for AI features. Chat/insights only send anonymous aggregates (no name or email).
+- Transaction text goes to Google/Groq for AI features (see the Privacy page).
 
 ## Accounts, banks & logos
 `core/catalog.py` lists Bangladeshi mobile wallets (bKash, Nagad, Rocket, Upay…), ~60 banks and card networks. Logos are in `core/static/core/logos/`

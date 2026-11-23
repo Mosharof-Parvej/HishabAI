@@ -94,6 +94,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     def has_access(self):
         return self.is_paid or self.trial_days_left > 0
 
+    def activate_plan(self, plan_key):
+        """Start (or extend) a paid plan. Time is added after the current paid period, never lost."""
+        days = settings.PLANS[plan_key]["days"]
+        base = self.paid_until if self.is_paid else timezone.now()
+        self.plan, self.paid_until = plan_key, base + timedelta(days=days)
+        self.save(update_fields=["plan", "paid_until"])
+
     def seed_defaults(self):
         Category.objects.bulk_create(
             [Category(user=self, name=n, kind=k, color=c, emoji=e) for n, k, c, e in DEFAULT_CATEGORIES],
@@ -226,11 +233,70 @@ class AIInsight(models.Model):
         unique_together = [("user", "kind", "day")]
 
 
-class AICall(models.Model):
-    """Counts AI calls per user to protect the shared free-tier API keys."""
+class VisitorDay(models.Model):
+    """Privacy-light analytics: one row per visitor per day (random cookie id, no IP, no pages). Staff are not counted."""
 
+    day = models.DateField(db_index=True)
+    key = models.CharField(max_length=32)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    views = models.PositiveIntegerField(default=0)
+    seconds = models.PositiveIntegerField(default=0)  # time the tab was open, visible and in use
+
+    class Meta:
+        unique_together = [("day", "key")]
+
+
+class PaymentRequest(models.Model):
+    """A manual payment: the user sent money to one of our accounts and uploaded proof; staff verify and approve."""
+
+    METHODS = [("bkash", "bKash"), ("nagad", "Nagad"), ("rocket", "Rocket"), ("bank", "Bank transfer")]
+    STATUSES = [("pending", "Pending review"), ("approved", "Approved"), ("rejected", "Rejected")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payments")
+    plan = models.CharField(max_length=10)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)  # the plan price when the request was made
+    method = models.CharField(max_length=10, choices=METHODS)
+    name = models.CharField(max_length=80)
+    email = models.EmailField()
+    phone = models.CharField(max_length=20)
+    sender_number = models.CharField("paid from (number / account)", max_length=40, blank=True)
+    transaction_id = models.CharField(max_length=60, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+    screenshot = models.BinaryField(editable=False)  # re-encoded JPEG; Vercel's disk is read-only so it lives in the database
+    status = models.CharField(max_length=10, choices=STATUSES, default="pending")
+    admin_note = models.CharField(max_length=300, blank=True)  # shown to the user, e.g. why it was rejected
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-id"]
+        indexes = [models.Index(fields=["status", "created_at"])]
+
+    def __str__(self):
+        return f"{self.user} · {self.plan} · {self.get_status_display()}"
+
+    def review(self, status, admin_user, note=""):
+        """Approve or reject once. Approving starts the plan. Safe to call twice: only a pending request changes."""
+        if self.status != "pending" or status not in ("approved", "rejected"):
+            return False
+        self.status, self.reviewed_by, self.reviewed_at = status, admin_user, timezone.now()
+        if note:
+            self.admin_note = note[:300]
+        self.save(update_fields=["status", "reviewed_by", "reviewed_at", "admin_note"])
+        if status == "approved":
+            self.user.activate_plan(self.plan)
+        return True
+
+
+class AICall(models.Model):
+    """One AI call. Counted per user and for the whole app to protect the shared free-tier API keys."""
+
+    KINDS = [("entry", "Smart Entry"), ("ask", "Ask AI"), ("voice", "Voice"), ("insight", "Insight"), ("tips", "Budget tips")]
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+    kind = models.CharField(max_length=8, choices=KINDS, blank=True)
+    provider = models.CharField(max_length=8, blank=True)
+    tokens = models.PositiveIntegerField(default=0)  # as reported by the provider; 0 when it does not report any
 
     class Meta:
         indexes = [models.Index(fields=["user", "created_at"])]

@@ -40,6 +40,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.UserLanguageMiddleware",
+    "core.middleware.VisitorMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -101,14 +102,24 @@ PLANS = {
     "monthly": {"label": "Monthly", "price": 149, "days": 30},
     "yearly": {"label": "Yearly", "price": 1299, "days": 365},
 }
-# Real payment gateways (bKash/Nagad/SSLCommerz) are not wired yet. While this is
-# True, choosing a plan activates it immediately so the flow can be demoed.
-SITE_AUTHOR = os.environ.get("SITE_AUTHOR", "")  # optional footer credit; the team is credited on the About us page
+SITE_AUTHOR = os.environ.get("SITE_AUTHOR", "")  # optional footer credit; the team is credited on the About page
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "")  # shown on the About & contact page when set
-PAYMENTS_DEMO_MODE = os.environ.get("PAYMENTS_DEMO_MODE", "1") == "1"
+
+# Manual payments: users send money to these accounts, upload proof, and staff approve it in the admin panel.
+# Only methods with a value are shown. Set them as Vercel environment variables.
+PAYMENT_ACCOUNTS = {
+    "bkash": {"number": os.environ.get("PAY_BKASH", ""), "holder": os.environ.get("PAY_BKASH_NAME", ""), "kind": os.environ.get("PAY_BKASH_TYPE", "Personal")},
+    "nagad": {"number": os.environ.get("PAY_NAGAD", ""), "holder": os.environ.get("PAY_NAGAD_NAME", ""), "kind": os.environ.get("PAY_NAGAD_TYPE", "Personal")},
+    "rocket": {"number": os.environ.get("PAY_ROCKET", ""), "holder": os.environ.get("PAY_ROCKET_NAME", ""), "kind": os.environ.get("PAY_ROCKET_TYPE", "Personal")},
+    "bank": {"bank": os.environ.get("PAY_BANK_NAME", ""), "holder": os.environ.get("PAY_BANK_ACCOUNT_NAME", ""), "number": os.environ.get("PAY_BANK_ACCOUNT_NO", ""),
+             "branch": os.environ.get("PAY_BANK_BRANCH", ""), "routing": os.environ.get("PAY_BANK_ROUTING", "")},
+}
+PAYMENT_PENDING_LIMIT = 3  # unreviewed payment requests per user
 
 AI_PRIMARY = os.environ.get("AI_PRIMARY", "gemini")
-AI_DAILY_LIMIT = int(os.environ.get("AI_DAILY_LIMIT", "60"))
+AI_DAILY_LIMIT = int(os.environ.get("AI_DAILY_LIMIT", "60"))  # requests per user per day
+AI_APP_DAILY_REQUESTS = int(os.environ.get("AI_APP_DAILY_REQUESTS", "400"))  # whole app, per day: protects the free-tier keys
+AI_APP_DAILY_TOKENS = int(os.environ.get("AI_APP_DAILY_TOKENS", "1000000"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

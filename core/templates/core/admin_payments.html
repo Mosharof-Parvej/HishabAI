@@ -1,0 +1,25 @@
+{% extends "core/admin_base.html" %}{% load ui %}
+{% block content %}
+<div class="seg" style="margin-bottom:14px">{% for v, t in tabs %}<a href="?status={{ v }}" class="{% if status == v %}on{% endif %}">{{ t }}{% if v in counts %} ({{ counts|get:v }}){% endif %}</a>{% endfor %}</div>
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(420px,1fr))">
+{% for p in page %}<div class="card">
+  <div class="row between" style="margin-bottom:10px"><div><b>{{ p.plan|title }} · {{ p.amount|taka }}</b> <span class="muted">via {{ p.get_method_display }}</span><div class="sm muted">{{ p.created_at|date:"j M Y, g:i a" }}</div></div>
+    <span class="pill {% if p.status == 'approved' %}income{% elif p.status == 'rejected' %}expense{% else %}warnp{% endif %}">{{ p.get_status_display }}</span></div>
+  <div class="row" style="align-items:flex-start;gap:14px">
+    <a href="{% url 'payment_screenshot' p.pk %}" target="_blank" rel="noopener" style="flex:none"><img src="{% url 'payment_screenshot' p.pk %}" alt="Payment screenshot" loading="lazy" style="width:150px;max-height:230px;object-fit:cover;object-position:top;border-radius:10px;border:1px solid var(--line)"></a>
+    <dl class="paylines" style="flex:1;margin:0">
+      <div><dt>User</dt><dd><a class="link" href="{% url 'admin_user' p.user_id %}">{{ p.user.email }}</a></dd></div>
+      <div><dt>Name</dt><dd>{{ p.name }}</dd></div><div><dt>Email</dt><dd>{{ p.email }}</dd></div><div><dt>Phone</dt><dd>{{ p.phone }}</dd></div>
+      <div><dt>Paid from</dt><dd>{{ p.sender_number|default:"—" }}</dd></div><div><dt>Transaction ID</dt><dd>{{ p.transaction_id|default:"—" }}</dd></div>
+      {% if p.note %}<div><dt>Note</dt><dd>{{ p.note }}</dd></div>{% endif %}
+      {% if p.admin_note %}<div><dt>Our note</dt><dd>{{ p.admin_note }}</dd></div>{% endif %}
+      {% if p.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ p.reviewed_at|date:"j M Y" }}</dd></div>{% endif %}</dl></div>
+  {% if p.status == 'pending' %}<form method="post" action="{% url 'admin_payment_review' p.pk %}" style="margin-top:12px">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <input name="note" placeholder="Note to the user (optional — shown if rejected)" maxlength="300" style="margin-bottom:8px">
+    <div class="row"><button name="action" value="approve" class="btn primary" style="flex:1">Approve &amp; activate</button><button name="action" value="reject" class="btn danger" style="flex:1" onclick="return confirm('Reject this payment?')">Reject</button></div></form>{% endif %}
+</div>
+{% empty %}<p class="muted">No {{ status }} payments.</p>{% endfor %}
+</div>
+{% if page.paginator.num_pages > 1 %}<div class="row between" style="margin-top:14px"><span class="sm muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  <span class="row">{% if page.has_previous %}<a class="btn sm" href="?status={{ status }}&page={{ page.previous_page_number }}">← Prev</a>{% endif %}{% if page.has_next %}<a class="btn sm" href="?status={{ status }}&page={{ page.next_page_number }}">Next →</a>{% endif %}</span></div>{% endif %}
+{% endblock %}

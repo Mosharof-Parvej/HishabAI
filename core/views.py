@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 import secrets
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -16,17 +17,19 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Sum
 from django.core.validators import validate_email
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.db.models import F
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from django.templatetags.static import static
 
 from . import ai, catalog, i18n, services
-from .models import AIInsight, Account, Budget, Category, Debt, DebtPayment, Transaction, User
+from .models import AIInsight, Account, Budget, Category, Debt, DebtPayment, PaymentRequest, Transaction, User, VisitorDay
 
 # ---------------------------------------------------------------- helpers
 
@@ -725,25 +728,106 @@ def debt_delete(request, pk):
 
 @login_required
 def subscription(request):
-    return render(request, "core/subscription.html", {"nav": "subscription", "plans": settings.PLANS,
-                                                       "demo": settings.PAYMENTS_DEMO_MODE})
+    return render(request, "core/subscription.html", {
+        "nav": "subscription", "plans": settings.PLANS, "payments": PaymentRequest.objects.filter(user=request.user).defer("screenshot")[:10],
+        "has_pending": PaymentRequest.objects.filter(user=request.user, status="pending").exists(), "can_pay": bool(payment_methods())})
 
 
-@require_POST
+def payment_methods():
+    """The payment accounts that are configured, ready to display: [{key, name, logo, lines:[(label, value)]}]."""
+    out = []
+    for key, name in PaymentRequest.METHODS:
+        acc = settings.PAYMENT_ACCOUNTS.get(key, {})
+        if not acc.get("number"):
+            continue
+        if key == "bank":
+            lines = [("Bank", acc.get("bank")), ("Account name", acc.get("holder")), ("Account number", acc["number"]),
+                     ("Branch", acc.get("branch")), ("Routing number", acc.get("routing"))]
+            logo = static(catalog.logo_file("bank"))
+        else:
+            lines = [("Number", acc["number"]), ("Account name", acc.get("holder")), ("Type", acc.get("kind"))]
+            logo = static(catalog.logo_file(key)) if catalog.logo_file(key) else None
+        out.append({"key": key, "name": name, "logo": logo, "lines": [(k, v) for k, v in lines if v], "copy": acc["number"]})
+    return out
+
+
+MAX_SCREENSHOT = 4_000_000  # Vercel rejects request bodies over ~4.5 MB
+
+
+def compress_screenshot(upload):
+    """Verify the upload really is an image and shrink it to a JPEG. Raises ValueError with a user-facing message."""
+    from io import BytesIO
+
+    from PIL import Image, ImageOps
+
+    Image.MAX_IMAGE_PIXELS = 40_000_000  # refuse decompression bombs
+    try:
+        img = Image.open(upload)
+        img.verify()
+        upload.seek(0)
+        img = ImageOps.exif_transpose(Image.open(upload)).convert("RGB")
+    except Exception:
+        raise ValueError("Please upload the screenshot as a PNG or JPG image.")
+    img.thumbnail((1600, 1600))
+    out = BytesIO()
+    img.save(out, "JPEG", quality=82, optimize=True)
+    return out.getvalue()
+
+
 @login_required
-def subscription_choose(request):
-    plan = request.POST.get("plan")
+def payment_start(request):
+    plan = request.POST.get("plan") or request.GET.get("plan")
     if plan not in settings.PLANS:
         return redirect("subscription")
-    if not settings.PAYMENTS_DEMO_MODE:
-        messages.error(request, "Online payment is not available yet.")
-        return redirect("subscription")
-    u = request.user
-    base = u.paid_until if u.is_paid else timezone.now()
-    u.plan, u.paid_until = plan, base + timedelta(days=settings.PLANS[plan]["days"])
-    u.save(update_fields=["plan", "paid_until"])
-    messages.success(request, f"{settings.PLANS[plan]['label']} plan activated (demo mode - no payment taken).")
-    return redirect("subscription")
+    methods = payment_methods()
+    ctx = {"nav": "subscription", "plan_key": plan, "plan": settings.PLANS[plan], "methods": methods, "errors": [],
+           "v": {"name": request.user.name, "email": request.user.email}, "max_mb": MAX_SCREENSHOT // 1_000_000}
+    if request.method == "POST":
+        p, f, errors = request.POST, request.FILES.get("screenshot"), []
+        v = {k: p.get(k, "").strip() for k in ("name", "email", "phone", "sender_number", "transaction_id", "note", "method")}
+        if v["method"] not in {m["key"] for m in methods}:
+            errors.append("Choose which account you sent the money to.")
+        if not v["name"]:
+            errors.append("Enter your name.")
+        try:
+            validate_email(v["email"])
+        except ValidationError:
+            errors.append("Enter a valid email address.")
+        if not re.fullmatch(r"\+?\d[\d\s-]{6,17}", v["phone"]):
+            errors.append("Enter a valid phone number, e.g. 01XXXXXXXXX.")
+        if v["transaction_id"] and PaymentRequest.objects.filter(transaction_id__iexact=v["transaction_id"], status__in=["pending", "approved"]).exists():
+            errors.append("That transaction ID has already been submitted.")
+        if PaymentRequest.objects.filter(user=request.user, status="pending").count() >= settings.PAYMENT_PENDING_LIMIT:
+            errors.append("You already have payments waiting for review. Please wait for them to be checked.")
+        shot = None
+        if not f:
+            errors.append("Upload a screenshot of the payment.")
+        elif f.size > MAX_SCREENSHOT:
+            errors.append(f"The screenshot is too large (max {MAX_SCREENSHOT // 1_000_000} MB).")
+        else:
+            try:
+                shot = compress_screenshot(f)
+            except ValueError as e:
+                errors.append(str(e))
+        if not errors:
+            PaymentRequest.objects.create(
+                user=request.user, plan=plan, amount=settings.PLANS[plan]["price"], method=v["method"], name=v["name"][:80], email=v["email"],
+                phone=v["phone"], sender_number=v["sender_number"][:40], transaction_id=v["transaction_id"][:60], note=v["note"][:300], screenshot=shot)
+            messages.success(request, "Payment submitted. We will check it and activate your plan — usually within a few hours.")
+            return redirect("subscription")
+        ctx.update(errors=errors, v=v)
+    return render(request, "core/payment.html", ctx)
+
+
+@login_required
+def payment_screenshot(request, pk):
+    pay = PaymentRequest.objects.filter(pk=pk).first()
+    if not pay or not (pay.user_id == request.user.pk or request.user.is_staff):
+        raise Http404
+    resp = HttpResponse(bytes(pay.screenshot), content_type="image/jpeg")
+    resp["Cache-Control"] = "private, max-age=3600"
+    resp["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 @require_POST
@@ -772,6 +856,22 @@ def settings_view(request):
             messages.success(request, "Profile saved.")
         return redirect("settings")
     return render(request, "core/settings.html", {"nav": "settings"})
+
+
+@csrf_exempt
+@require_POST
+def api_ping(request):
+    """Heartbeat from the page every 15 s while the tab is visible and in use: adds to that visitor's time on site."""
+    from .middleware import MAX_DAILY_SECONDS, is_counted
+
+    key = request.COOKIES.get("hv", "")
+    try:
+        secs = max(0, min(30, int(request.POST.get("s", "0"))))
+    except ValueError:
+        secs = 0
+    if secs and len(key) == 24 and key.isalnum() and is_counted(request):
+        VisitorDay.objects.filter(day=timezone.localdate(), key=key, seconds__lt=MAX_DAILY_SECONDS).update(seconds=F("seconds") + secs)
+    return HttpResponse(status=204)
 
 
 # ---------------------------------------------------------------- public pages

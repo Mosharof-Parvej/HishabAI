@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views as v
+from . import views_admin as va
 
 urlpatterns = [
     path("", v.dashboard, name="dashboard"),
@@ -31,11 +32,19 @@ urlpatterns = [
     path("debts/<int:pk>/remind/", v.debt_remind, name="debt_remind"),
     path("debts/<int:pk>/delete/", v.debt_delete, name="debt_delete"),
     path("subscription/", v.subscription, name="subscription"),
-    path("subscription/choose/", v.subscription_choose, name="subscription_choose"),
+    path("subscription/pay/", v.payment_start, name="payment_start"),
+    path("payments/<int:pk>/screenshot/", v.payment_screenshot, name="payment_screenshot"),
     path("profile/", v.settings_view, name="settings"),
     path("language/", v.set_language, name="set_language"),
     path("api/insight/", v.api_insight, name="api_insight"),
     path("api/transcribe/", v.api_transcribe, name="api_transcribe"),
+    path("admin/", va.overview, name="admin_overview"),
+    path("admin/users/", va.users, name="admin_users"),
+    path("admin/users/<int:pk>/", va.user_detail, name="admin_user"),
+    path("admin/users/<int:pk>/active/", va.user_active, name="admin_user_active"),
+    path("admin/payments/", va.payments, name="admin_payments"),
+    path("admin/payments/<int:pk>/review/", va.payment_review, name="admin_payment_review"),
+    path("api/ping/", v.api_ping, name="api_ping"),
     path("api/extract/", v.api_extract, name="api_extract"),
     path("api/transactions/", v.api_save_transactions, name="api_save_transactions"),
     path("api/budget-suggestions/", v.api_budget_suggestions, name="api_budget_suggestions"),

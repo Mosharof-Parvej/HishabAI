@@ -13,7 +13,7 @@ window.aiMeter = used => {  // refresh every "AI today" meter on the page
   if (used === null || used === undefined || used === "") return;
   document.querySelectorAll(".aimeter").forEach(m => {
     const limit = +m.dataset.limit || 1, pct = Math.min(100, Math.round(+used / limit * 100));
-    m.querySelector("[data-ai-pct]").textContent = pct; m.querySelector("[data-ai-used]").textContent = used;
+    m.querySelector("[data-ai-pct]").textContent = pct;
     const bar = m.querySelector(".bar"); bar.querySelector("i").style.width = pct + "%";
     bar.classList.toggle("danger", pct >= 90); bar.classList.toggle("warn", pct >= 70 && pct < 90);
   });
@@ -173,3 +173,21 @@ document.querySelectorAll("select[data-remind]").forEach(sel => {
   sel.addEventListener("change", () => { show(); if (sel.hasAttribute("data-auto") && sel.value !== "date") form.submit(); else if (sel.value === "date" && date) date.focus(); });
   show();
 });
+
+/* copy buttons */
+document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", async () => {
+  const label = b.textContent;
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; } catch (e) { b.textContent = b.dataset.copy; }
+  setTimeout(() => b.textContent = label, 1600);
+}));
+
+/* time on site: tell the server every 15 s while the tab is visible and was used in the last minute (counts toward admin stats) */
+(() => {
+  let last = Date.now();
+  ["pointerdown", "keydown", "scroll", "touchstart", "mousemove"].forEach(e => addEventListener(e, () => { last = Date.now(); }, {passive: true}));
+  setInterval(() => {
+    if (document.visibilityState !== "visible" || Date.now() - last > 60000) return;
+    const fd = new FormData(); fd.append("s", "15");
+    fetch("/api/ping/", {method: "POST", body: fd, keepalive: true, credentials: "same-origin"}).catch(() => {});
+  }, 15000);
+})();

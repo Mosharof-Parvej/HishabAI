@@ -11,8 +11,10 @@ from decimal import Decimal, InvalidOperation
 
 import requests
 from django.conf import settings
+from django.db.models import Count, Sum
 from django.utils import timezone
 
+from . import services
 from .models import AICall
 
 # Primary gets a short timeout so a slow/overloaded Gemini falls through to Groq quickly.
@@ -26,6 +28,18 @@ class AIUnavailable(Exception):
 
 class AIQuotaExceeded(Exception):
     pass
+
+
+class Text(str):
+    """A model reply that also remembers how many tokens it cost (providers report this differently)."""
+
+    tokens = 0
+
+
+def _with_tokens(text, tokens):
+    t = Text(text)
+    t.tokens = int(tokens or 0)
+    return t
 
 
 def _gemini(system, prompt, json_mode):
@@ -43,7 +57,8 @@ def _gemini(system, prompt, json_mode):
         timeout=GEMINI_TIMEOUT,
     )
     r.raise_for_status()
-    return "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
+    j = r.json()
+    return _with_tokens("".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"]), j.get("usageMetadata", {}).get("totalTokenCount"))
 
 
 def _groq(system, prompt, json_mode):
@@ -61,7 +76,8 @@ def _groq(system, prompt, json_mode):
         timeout=GROQ_TIMEOUT,
     )
     r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+    j = r.json()
+    return _with_tokens(j["choices"][0]["message"]["content"], j.get("usage", {}).get("total_tokens"))
 
 
 def _providers():
@@ -74,25 +90,36 @@ def _providers():
     return available
 
 
-def _gate(user, providers):
-    """Refuse when no key is configured or the user's daily cap is used; otherwise count this call."""
+def _gate(user, providers, kind=""):
+    """Refuse when no key is configured, the user's daily cap is used, or the whole app has used today's free-tier
+    allowance; otherwise record this call (tokens are filled in once the provider answers). Resets at midnight (Asia/Dhaka)."""
     if not providers:
         raise AIUnavailable("No AI key configured. Set GEMINI_API_KEY and/or GROQ_API_KEY.")
-    since = timezone.now() - timedelta(hours=24)
-    if AICall.objects.filter(user=user, created_at__gte=since).count() >= settings.AI_DAILY_LIMIT:
+    today = AICall.objects.filter(created_at__gte=services.day_start())
+    if today.filter(user=user).count() >= settings.AI_DAILY_LIMIT:
         raise AIQuotaExceeded("Daily AI limit reached. Try again tomorrow.")
-    AICall.objects.create(user=user)
+    agg = today.aggregate(n=Count("id"), t=Sum("tokens"))
+    if agg["n"] >= settings.AI_APP_DAILY_REQUESTS or (agg["t"] or 0) >= settings.AI_APP_DAILY_TOKENS:
+        raise AIQuotaExceeded("AI is at its daily limit for everyone and will be back after midnight (Bangladesh time).")
+    return AICall.objects.create(user=user, kind=kind)
 
 
-def ask(user, system, prompt, json_mode=False):
-    """Call the primary provider, fall back to the other. Enforces a per-user daily cap."""
+def _record(call, name, result):
+    call.provider, call.tokens = name, getattr(result, "tokens", 0)
+    call.save(update_fields=["provider", "tokens"])
+
+
+def ask(user, system, prompt, json_mode=False, kind=""):
+    """Call the primary provider, fall back to the other. Enforces the per-user and whole-app daily caps."""
     providers = _providers()
-    _gate(user, providers)
+    call = _gate(user, providers, kind)
     errors = []
     for name, fn in providers:
         try:
-            text = fn(system, prompt, json_mode).strip()
+            res = fn(system, prompt, json_mode)
+            text = str(res).strip()
             if text:
+                _record(call, name, res)
                 return text
             errors.append(f"{name}: empty response")
         except (requests.RequestException, KeyError, IndexError, ValueError) as e:
@@ -116,7 +143,7 @@ def _groq_stt(audio, mime):
         timeout=GROQ_TIMEOUT,
     )
     r.raise_for_status()
-    return r.json()["text"]
+    return _with_tokens(r.json()["text"], 0)  # Whisper bills by audio time, not tokens
 
 
 def _gemini_stt(audio, mime):
@@ -129,7 +156,8 @@ def _gemini_stt(audio, mime):
         timeout=GROQ_TIMEOUT,
     )
     r.raise_for_status()
-    return "".join(p.get("text", "") for p in r.json()["candidates"][0]["content"]["parts"])
+    j = r.json()
+    return _with_tokens("".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"]), j.get("usageMetadata", {}).get("totalTokenCount"))
 
 
 def transcribe(user, audio, mime):
@@ -139,11 +167,13 @@ def transcribe(user, audio, mime):
         impls.append(("groq", _groq_stt))
     if settings.GEMINI_API_KEY:
         impls.append(("gemini", _gemini_stt))
-    _gate(user, impls)
+    call = _gate(user, impls, "voice")
     errors = []
     for name, fn in impls:
         try:
-            return fn(audio, mime).strip()
+            res = fn(audio, mime)
+            _record(call, name, res)
+            return str(res).strip()
         except (requests.RequestException, KeyError, IndexError, ValueError) as e:
             errors.append(f"{name}: {e.__class__.__name__}")
     raise AIUnavailable("Speech recognition failed (" + "; ".join(errors) + ")")
@@ -183,7 +213,7 @@ def extract_transactions(user, text, categories, accounts=()):
         f"ACCOUNTS: {', '.join(accounts) or 'none'}\n"
         f"TEXT:\n{text[:2000]}"
     )
-    data = _parse_json(ask(user, EXTRACT_SYSTEM, prompt, json_mode=True))
+    data = _parse_json(ask(user, EXTRACT_SYSTEM, prompt, json_mode=True, kind="entry"))
     rows = []
     for t in (data.get("transactions") or [])[:20]:
         try:
@@ -251,7 +281,7 @@ def parse_query(user, question, categories, accounts):
     prompt = (f"TODAY: {today.isoformat()} ({today.strftime('%A')})\n"
               f"CATEGORIES: {', '.join(categories['expense'] + categories['income'])}\nACCOUNTS: {', '.join(accounts) or 'none'}\n"
               f"QUESTION: {question[:500]}")
-    raw = _parse_json(ask(user, QUERY_SYSTEM, prompt, json_mode=True))
+    raw = _parse_json(ask(user, QUERY_SYSTEM, prompt, json_mode=True, kind="ask"))
     cat_all = {c.lower(): c for c in categories["expense"] + categories["income"]}
     acc_all = {a.lower(): a for a in accounts}
     f = {
@@ -280,7 +310,7 @@ dashboard, based ONLY on the JSON data. Mention a concrete number. Plain text, n
 
 def insight(user, context):
     lang = "Bangla" if user.language == "bn" else "English"
-    return ask(user, INSIGHT_SYSTEM, f"Write in {lang}.\nDATA:\n{json.dumps(context, ensure_ascii=False)}")
+    return ask(user, INSIGHT_SYSTEM, f"Write in {lang}.\nDATA:\n{json.dumps(context, ensure_ascii=False)}", kind="insight")
 
 
 BUDGET_SYSTEM = """You are a budgeting coach for a Bangladeshi user. From the JSON data (this month's spend, budgets, last month),
@@ -290,5 +320,5 @@ return ONLY JSON: {"tips":[string,string,string]}. Each tip: one sentence, concr
 
 def budget_suggestions(user, context):
     lang = "Bangla" if user.language == "bn" else "English"
-    data = _parse_json(ask(user, BUDGET_SYSTEM, f"Write in {lang}.\nDATA:\n{json.dumps(context, ensure_ascii=False)}", json_mode=True))
+    data = _parse_json(ask(user, BUDGET_SYSTEM, f"Write in {lang}.\nDATA:\n{json.dumps(context, ensure_ascii=False)}", json_mode=True, kind="tips"))
     return [str(t) for t in (data.get("tips") or [])][:3]
