@@ -1,6 +1,6 @@
 # HishabAI — AI-powered personal expense tracker (Django)
 
-Bangla/English natural-language expense entry, dashboard, budgets & reports, AI assistant and a 30-day trial → paid plans.
+Bangla/English natural-language expense entry, dashboard, budgets & reports, AI assistant and a 15-day trial → paid plans, accounts (cash / bKash / Nagad / banks / cards), debts with repayment reminders, and AskHishabAI.
 Stack: Django 5.2 · Neon Postgres · Vercel · Gemini + Groq (free-tier AI, automatic fallback).
 
 ## 1. Run locally
@@ -82,6 +82,14 @@ Never set `DEBUG=1` in production.
 - **Payments are a demo.** `PAYMENTS_DEMO_MODE=1` (default) activates a plan instantly without taking money. Integrate a gateway (SSLCommerz, bKash, Nagad…), activate plans from its verified webhook, then set `PAYMENTS_DEMO_MODE=0`.
 - Free AI tiers have rate limits and no SLA; use a paid key for real traffic.
 - Add a privacy policy: transaction text goes to Google/xAI for AI features. Chat/insights only send anonymous aggregates (no name or email).
+
+## Accounts, banks & logos
+`core/catalog.py` lists Bangladeshi mobile wallets (bKash, Nagad, Rocket, Upay…), ~60 banks and card networks. Logos are in `core/static/core/logos/`
+(fetched from each provider's own site or Wikipedia). They are trademarks of their owners and are used only to identify the provider. Providers without a
+logo file show an initial badge; drop a `<key>.png` (128×128) into that folder to add or replace one.
+
+## Reminders
+Debts due within 3 days (or overdue) show in the bell icon, the dashboard and the Debts menu badge. These are in-app reminders; email/SMS/push are not included.
 
 ## Project map
 `core/ai.py` providers + prompts · `core/services.py` analytics · `core/views.py` pages & API · `core/templates/core/` UI · `core/tests.py`

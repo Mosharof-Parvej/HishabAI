@@ -8,12 +8,12 @@
     <p>Write in Bangla or English — AI records, categorizes and analyzes it for you.</p>
     <div class="demo"><span class="sm muted">Try typing:</span><br>আজ বাজারে ৫৪০ টাকা খরচ হলো</div>
     <div class="demo"><span class="spark">✦</span> <span class="sm muted">AI extracted 1 transaction</span><br><b>Groceries</b> · Expense · Today <b class="expense" style="float:right">−৳540</b></div>
-    <p class="sm" style="opacity:.85">30-day free trial · No card required · Your data stays yours</p>
+    <p class="sm" style="opacity:.85">{{ TRIAL_DAYS }}-day free trial · No card required · Your data stays yours</p>
   </section>
   <section class="auth-r">
     <form method="post" novalidate>{% csrf_token %}
       <h1>{% if mode == 'signup' %}Create your account{% else %}Welcome back{% endif %}</h1>
-      <p class="muted" style="margin-bottom:20px">{% if mode == 'signup' %}Start your 30-day free trial.{% else %}Log in to continue tracking your expenses.{% endif %}</p>
+      <p class="muted" style="margin-bottom:20px">{% if mode == 'signup' %}Start your {{ TRIAL_DAYS }}-day free trial.{% else %}Log in to continue tracking your expenses.{% endif %}</p>
       {% for m in messages %}<div class="msg error" style="margin-bottom:12px">{{ m }}</div>{% endfor %}
       {% if error %}<div class="msg error" style="margin-bottom:12px">{{ error }}</div>{% endif %}
       <input type="hidden" name="next" value="{{ request.GET.next }}">

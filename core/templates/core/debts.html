@@ -1,0 +1,26 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}Debts{% endblock %}
+{% block heading %}Debts{% endblock %}
+{% block sub %}Money you borrowed or lent, with repayment reminders{% endblock %}
+{% block content %}
+{% if error %}<div class="msg error" style="margin-bottom:14px">{{ error }}</div>{% endif %}
+<div class="grid g2e" style="margin-bottom:16px">
+  <div class="card stat"><div class="lbl">You owe</div><div class="val expense">{{ totals.owe|taka }}</div></div>
+  <div class="card stat"><div class="lbl">Owed to you</div><div class="val income">{{ totals.owed|taka }}</div></div>
+</div>
+<div class="card" style="margin-bottom:16px"><h3>Add a debt</h3>
+  <form method="post" action="{% url 'debt_add' %}">{% csrf_token %}
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">
+      <div class="field"><label>Type</label><select name="direction"><option value="borrowed">I borrowed (I owe)</option><option value="lent">I lent (they owe me)</option></select></div>
+      <div class="field"><label>Person</label><input name="person" required maxlength="80" placeholder="e.g. Rahim"></div>
+      <div class="field"><label>Amount (৳)</label><input name="amount" type="number" min="0.01" step="0.01" required></div>
+      <div class="field"><label>Date</label><input name="date" type="date" value="{{ today|date:'Y-m-d' }}"></div>
+      <div class="field"><label>Repay by</label><input name="due_date" type="date"></div>
+      <div class="field"><label>Account</label><select name="account"><option value="">No account</option>{% for a in accts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Note</label><input name="note" maxlength="200"></div></div>
+    <button class="btn primary">Save debt</button></form></div>
+<div class="grid g2e">
+  <div class="card"><h3>I owe</h3>{% include "core/_debt_list.html" with rows=owe %}</div>
+  <div class="card"><h3>Owed to me</h3>{% include "core/_debt_list.html" with rows=owed %}</div>
+</div>
+{% endblock %}

@@ -4,10 +4,10 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.db.models.functions import TruncDay, TruncMonth
 
-from .models import Budget, Transaction
+from .models import Account, Budget, Debt, DebtPayment, Transaction
 
 ZERO = Decimal("0")
 
@@ -113,3 +113,76 @@ def ai_context(user, today):
             for t in recent
         ],
     }
+
+
+# ---------------------------------------------------------------- accounts
+
+def account_balances(user):
+    """[(Account, balance)]: opening + income - expense, plus debt money in/out through that account."""
+    bal = defaultdict(lambda: ZERO)
+    accounts = list(Account.objects.filter(user=user))
+    for a in accounts:
+        bal[a.id] = a.opening_balance
+    for r in Transaction.objects.filter(user=user, account__isnull=False).values("account_id", "kind").annotate(s=Sum("amount")):
+        bal[r["account_id"]] += r["s"] if r["kind"] == "income" else -r["s"]
+    for r in Debt.objects.filter(user=user, account__isnull=False).values("account_id", "direction").annotate(s=Sum("amount")):
+        bal[r["account_id"]] += r["s"] if r["direction"] == "borrowed" else -r["s"]  # borrowed = cash in, lent = cash out
+    for r in DebtPayment.objects.filter(debt__user=user, account__isnull=False).values("account_id", "debt__direction").annotate(s=Sum("amount")):
+        bal[r["account_id"]] += -r["s"] if r["debt__direction"] == "borrowed" else r["s"]  # repaying out, being repaid in
+    return [(a, bal[a.id]) for a in accounts]
+
+
+# ---------------------------------------------------------------- debts
+
+def debt_rows(user, today, open_only=False):
+    """Each debt with paid/remaining and a status: settled | overdue | due_soon | open."""
+    rows = []
+    for d in Debt.objects.filter(user=user).select_related("account").annotate(paid=Sum("payments__amount")):
+        paid = d.paid or ZERO
+        remaining = d.amount - paid
+        days = (d.due_date - today).days if d.due_date else None
+        status = ("settled" if remaining <= 0 else "overdue" if days is not None and days < 0
+                  else "due_soon" if days is not None and days <= REMIND_DAYS else "open")
+        if open_only and status == "settled":
+            continue
+        rows.append({"debt": d, "paid": paid, "remaining": remaining, "days": days, "status": status})
+    return rows
+
+
+REMIND_DAYS = 3
+
+
+def debt_totals(rows):
+    owe = sum((r["remaining"] for r in rows if r["debt"].direction == "borrowed" and r["status"] != "settled"), ZERO)
+    owed = sum((r["remaining"] for r in rows if r["debt"].direction == "lent" and r["status"] != "settled"), ZERO)
+    return {"owe": owe, "owed": owed}
+
+
+def reminders(user, today):
+    """Unsettled debts that are overdue or due within REMIND_DAYS, most urgent first."""
+    items = [r for r in debt_rows(user, today) if r["status"] in ("overdue", "due_soon")]
+    return sorted(items, key=lambda r: r["days"])
+
+
+# ---------------------------------------------------------------- AskHishabAI query
+
+def run_transaction_filter(user, f):
+    """f is the already-validated filter dict from ai.parse_query. Returns (rows queryset, summary)."""
+    qs = Transaction.objects.filter(user=user).select_related("category", "account")
+    if f.get("date_from"):
+        qs = qs.filter(date__gte=f["date_from"])
+    if f.get("date_to"):
+        qs = qs.filter(date__lte=f["date_to"])
+    if f.get("kind"):
+        qs = qs.filter(kind=f["kind"])
+    if f.get("categories"):
+        qs = qs.filter(category__name__in=f["categories"])
+    if f.get("accounts"):
+        qs = qs.filter(account__name__in=f["accounts"])
+    if f.get("search"):
+        qs = qs.filter(Q(note__icontains=f["search"]) | Q(category__name__icontains=f["search"]))
+    agg = {r["kind"]: r["s"] for r in qs.order_by().values("kind").annotate(s=Sum("amount"))}
+    income, expense = agg.get("income", ZERO), agg.get("expense", ZERO)
+    count = qs.count()
+    order = {"date": ("-date", "-id"), "amount": ("-amount", "-id"), "oldest": ("date", "id")}[f.get("sort", "date")]
+    return qs.order_by(*order)[: f.get("limit", 50)], {"count": count, "income": income, "expense": expense, "balance": income - expense}

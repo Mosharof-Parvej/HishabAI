@@ -30,7 +30,7 @@ class UserManager(BaseUserManager):
         user.set_password(password)
         user.trial_ends_at = timezone.now() + timedelta(days=settings.TRIAL_DAYS)
         user.save(using=self._db)
-        user.seed_categories()
+        user.seed_defaults()
         return user
 
     def create_superuser(self, email, password=None, **extra):
@@ -79,11 +79,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     def has_access(self):
         return self.is_paid or self.trial_days_left > 0
 
-    def seed_categories(self):
+    def seed_defaults(self):
         Category.objects.bulk_create(
             [Category(user=self, name=n, kind=k, color=c) for n, k, c in DEFAULT_CATEGORIES],
             ignore_conflicts=True,
         )
+        Account.objects.get_or_create(user=self, name="Cash", defaults={"kind": "cash", "provider": "cash"})
 
 
 class Category(models.Model):
@@ -101,11 +102,41 @@ class Category(models.Model):
         return self.name
 
 
+class Account(models.Model):
+    """Where money lives: cash, a mobile wallet, a bank account or a card."""
+
+    KINDS = [("cash", "Cash"), ("wallet", "Mobile wallet"), ("bank", "Bank"), ("card", "Card")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="accounts")
+    kind = models.CharField(max_length=6, choices=KINDS)
+    provider = models.CharField(max_length=30, blank=True)  # key in core.catalog.PROVIDERS
+    name = models.CharField(max_length=60)
+    opening_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("user", "name")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def logo(self):
+        from .catalog import logo_file
+
+        return logo_file(self.provider) if self.provider else None
+
+    @property
+    def initial(self):
+        return (self.name[:1] or "?").upper()
+
+
 class Transaction(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="transactions")
     kind = models.CharField(max_length=7, choices=[("expense", "Expense"), ("income", "Income")])
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name="transactions")
     date = models.DateField(default=timezone.localdate)
     note = models.CharField(max_length=200, blank=True)
     ai_generated = models.BooleanField(default=False)
@@ -128,14 +159,32 @@ class Budget(models.Model):
         unique_together = [("user", "category")]
 
 
-class ChatMessage(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat")
-    role = models.CharField(max_length=9, choices=[("user", "user"), ("assistant", "assistant")])
-    content = models.TextField()
+class Debt(models.Model):
+    """Money borrowed (I owe) or lent (owed to me). Repayments are DebtPayment rows."""
+
+    DIRECTIONS = [("borrowed", "I borrowed (I owe)"), ("lent", "I lent (they owe me)")]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="debts")
+    direction = models.CharField(max_length=8, choices=DIRECTIONS)
+    person = models.CharField(max_length=80)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
+    date = models.DateField(default=timezone.localdate)
+    due_date = models.DateField(null=True, blank=True)
+    note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["id"]
+        ordering = ["due_date", "-id"]
+
+
+class DebtPayment(models.Model):
+    debt = models.ForeignKey(Debt, on_delete=models.CASCADE, related_name="payments")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    date = models.DateField(default=timezone.localdate)
+    account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
 
 
 class AIInsight(models.Model):

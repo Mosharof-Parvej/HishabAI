@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import ai
-from .models import AICall, Budget, Category, Transaction, User
+from .models import AICall, Account, Budget, Category, Debt, DebtPayment, Transaction, User
 
 
 class AppTests(TestCase):
@@ -22,7 +22,8 @@ class AppTests(TestCase):
         self.assertRedirects(r, reverse("dashboard"))
         u = User.objects.get(email="new@example.com")
         self.assertEqual(u.categories.count(), 12)
-        self.assertEqual(u.trial_days_left, 30)
+        self.assertEqual(u.trial_days_left, 15)
+        self.assertEqual(list(u.accounts.values_list('name', flat=True)), ['Cash'])
         c.post(reverse("logout"))
         self.assertEqual(c.post(reverse("login"), {"email": "new@example.com", "password": "bad"}).status_code, 200)
         self.assertRedirects(c.post(reverse("login"), {"email": "new@example.com", "password": "very-long-pass-1"}), reverse("dashboard"))
@@ -35,7 +36,7 @@ class AppTests(TestCase):
 
     def test_pages_require_login_and_render(self):
         self.assertEqual(Client().get(reverse("dashboard")).status_code, 302)
-        for name in ["dashboard", "smart_entry", "transactions", "budgets", "assistant", "subscription", "settings"]:
+        for name in ["dashboard", "smart_entry", "transactions", "transaction_add", "budgets", "ask", "accounts", "debts", "subscription", "settings"]:
             self.assertEqual(self.c.get(reverse(name)).status_code, 200, name)
         self.assertEqual(self.c.get(reverse("budgets") + "?view=yearly&month=2026-03").status_code, 200)
 
@@ -77,18 +78,98 @@ class AppTests(TestCase):
     def test_expired_trial_blocks_ai(self):
         self.user.trial_ends_at = timezone.now() - timedelta(days=1)
         self.user.save()
-        r = self.c.post(reverse("api_chat"), json.dumps({"message": "hi"}), content_type="application/json")
+        r = self.c.post(reverse("api_ask"), json.dumps({"question": "hi"}), content_type="application/json")
         self.assertEqual(r.status_code, 402)
         self.assertEqual(self.c.get(reverse("dashboard")).status_code, 200)  # data stays viewable
 
-    @patch("core.ai.ask", return_value="You spent ৳250 on food.")
-    def test_chat_and_insight_cache(self, ask):
+    @patch("core.ai.ask", return_value="Spending dipped 5% this month.")
+    def test_insight_is_cached_per_day(self, ask):
         Transaction.objects.create(user=self.user, kind="expense", amount=250, category=Category.objects.get(user=self.user, name="Food"))
-        r = self.c.post(reverse("api_chat"), json.dumps({"message": "food?"}), content_type="application/json")
-        self.assertIn("250", r.json()["answer"])
         self.c.get(reverse("api_insight")); self.c.get(reverse("api_insight"))
-        self.assertEqual(ask.call_count, 2)  # chat + ONE insight (second was cached)
-        self.assertContains(self.c.get(reverse("assistant")), "food?")
+        self.assertEqual(ask.call_count, 1)
+
+    @patch("core.ai.ask")
+    def test_ask_runs_filter_against_database(self, ask):
+        food = Category.objects.get(user=self.user, name="Food")
+        bk = Account.objects.create(user=self.user, kind="wallet", provider="bkash", name="bKash")
+        today = timezone.localdate()
+        Transaction.objects.create(user=self.user, kind="expense", amount=250, category=food, account=bk, date=today, note="Lunch")
+        Transaction.objects.create(user=self.user, kind="expense", amount=100, category=Category.objects.get(user=self.user, name="Transport"), date=today)
+        Transaction.objects.create(user=self.user, kind="income", amount=900, category=Category.objects.get(user=self.user, name="Salary"), date=today)
+        other = User.objects.create_user("o@example.com", "s3cret-pass-9")
+        Transaction.objects.create(user=other, kind="expense", amount=777, category=Category.objects.get(user=other, name="Food"), date=today)
+        # AI may hallucinate names; unknown categories/accounts must be ignored, never trusted
+        ask.return_value = json.dumps({"intent": "transactions", "title": "Food spend", "kind": "expense", "categories": ["Food", "Made Up"],
+                                       "accounts": ["bKash", "Nope"], "sort": "date", "limit": 500})
+        d = self.c.post(reverse("api_ask"), json.dumps({"question": "food?"}), content_type="application/json").json()
+        self.assertEqual(d["summary"]["expense"], 250.0)
+        self.assertEqual(d["summary"]["count"], 1)
+        self.assertEqual([r["note"] for r in d["rows"]], ["Lunch"])
+        ask.return_value = json.dumps({"intent": "transactions", "title": "All"})
+        d = self.c.post(reverse("api_ask"), json.dumps({"question": "all"}), content_type="application/json").json()
+        self.assertEqual((d["summary"]["income"], d["summary"]["expense"], d["summary"]["balance"]), (900.0, 350.0, 550.0))
+
+    def test_manual_add_validates_and_saves(self):
+        food = Category.objects.get(user=self.user, name="Food")
+        cash = Account.objects.get(user=self.user, name="Cash")
+        good = {"kind": "expense", "amount": "120", "category": food.id, "account": cash.id, "date": timezone.localdate().isoformat(), "note": "Tea"}
+        self.assertRedirects(self.c.post(reverse("transaction_add"), good), reverse("transactions"))
+        t = Transaction.objects.get()
+        self.assertEqual((t.amount, t.account, t.ai_generated), (120, cash, False))
+        for bad in [{**good, "amount": "0"}, {**good, "kind": "income"}, {**good, "date": "2999-01-01"}]:  # income + Food category mismatch
+            self.assertContains(self.c.post(reverse("transaction_add"), bad), "Please enter a valid")
+        self.assertEqual(Transaction.objects.count(), 1)
+
+    def test_accounts_add_validates_against_catalog(self):
+        r = self.c.post(reverse("accounts_add"), {"kind": "wallet", "provider": "bkash", "opening_balance": "500"})
+        self.assertRedirects(r, reverse("accounts"))
+        a = Account.objects.get(provider="bkash")
+        self.assertEqual((a.name, a.opening_balance, a.kind), ("bKash", 500, "wallet"))
+        for bad in [{"kind": "bank", "provider": "bkash"}, {"kind": "wallet", "provider": "nope"}, {"kind": "wallet", "provider": "bkash"}]:  # wrong kind / unknown / duplicate name
+            self.c.post(reverse("accounts_add"), bad)
+        self.assertEqual(Account.objects.filter(user=self.user).count(), 2)  # Cash + bKash
+        self.assertContains(self.c.get(reverse("accounts")), "core/logos/bkash.png")
+
+    def test_account_balance_includes_transactions_and_debts(self):
+        from . import services
+        cash = Account.objects.get(user=self.user, name="Cash")
+        cash.opening_balance = 1000; cash.save()
+        Transaction.objects.create(user=self.user, kind="income", amount=500, account=cash)
+        Transaction.objects.create(user=self.user, kind="expense", amount=200, account=cash)
+        borrowed = Debt.objects.create(user=self.user, direction="borrowed", person="A", amount=300, account=cash)
+        lent = Debt.objects.create(user=self.user, direction="lent", person="B", amount=100, account=cash)
+        DebtPayment.objects.create(debt=borrowed, amount=50, account=cash)   # I repay: -50
+        DebtPayment.objects.create(debt=lent, amount=40, account=cash)       # they repay me: +40
+        # 1000 +500 -200 +300(borrowed in) -100(lent out) -50 +40
+        self.assertEqual(dict(services.account_balances(self.user))[cash], 1490)
+
+    def test_debt_reminders_and_repayment(self):
+        today = timezone.localdate()
+        late = Debt.objects.create(user=self.user, direction="borrowed", person="Rahim", amount=500, due_date=today - timedelta(days=2))
+        Debt.objects.create(user=self.user, direction="lent", person="Karim", amount=200, due_date=today + timedelta(days=2))
+        Debt.objects.create(user=self.user, direction="lent", person="Far", amount=200, due_date=today + timedelta(days=30))
+        page = self.c.get(reverse("dashboard")).content.decode()
+        self.assertIn("Rahim", page); self.assertIn("Karim", page); self.assertNotIn("Far", page.split("Repayment reminders")[1].split("</details>")[0])
+        self.c.post(reverse("debt_pay", args=[late.pk]), {"amount": "999"})   # more than remaining: rejected
+        self.assertEqual(late.payments.count(), 0)
+        self.c.post(reverse("debt_pay", args=[late.pk]), {"amount": "500"})
+        self.assertEqual(late.payments.count(), 1)
+        from . import services
+        self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Karim"])  # settled debt no longer reminds
+
+    def test_debts_are_private(self):
+        other = User.objects.create_user("o@example.com", "s3cret-pass-9")
+        d = Debt.objects.create(user=other, direction="lent", person="X", amount=10)
+        self.c.post(reverse("debt_delete", args=[d.pk]))
+        self.c.post(reverse("debt_pay", args=[d.pk]), {"amount": "5"})
+        self.assertEqual((Debt.objects.count(), DebtPayment.objects.count()), (1, 0))
+
+    def test_catalog_logos_exist_and_cover_bd_providers(self):
+        from . import catalog
+        for key in ["bkash", "nagad", "brac", "city", "dbbl", "ebl", "ibbl", "sonali", "visa", "mastercard", "cash"]:
+            self.assertTrue(catalog.has_logo(key), key)
+        self.assertGreaterEqual(len(catalog.for_kind("bank")), 55)
+        self.assertGreaterEqual(len(catalog.for_kind("wallet")), 10)
 
     @override_settings(AI_DAILY_LIMIT=1)
     def test_daily_cap(self):

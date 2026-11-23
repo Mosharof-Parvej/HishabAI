@@ -8,19 +8,22 @@
     <input name="q" value="{{ f.q }}" placeholder="Search notes" style="width:200px">
     <select name="kind" style="width:130px"><option value="">All types</option><option value="expense" {% if f.kind == 'expense' %}selected{% endif %}>Expense</option><option value="income" {% if f.kind == 'income' %}selected{% endif %}>Income</option></select>
     <select name="cat" style="width:170px"><option value="">All categories</option>{% for c in cats %}<option value="{{ c.id }}" {% if f.cat == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <select name="acc" style="width:150px"><option value="">All accounts</option>{% for a in accts %}<option value="{{ a.id }}" {% if f.acc == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select>
     <button class="btn">Filter</button>
     <a class="btn outline" href="{% url 'transactions_csv' %}?{{ qs }}" style="margin-left:auto">Export CSV</a>
-    <a class="btn primary" href="{% url 'smart_entry' %}">✦ Add</a>
+    <a class="btn" href="{% url 'transaction_add' %}">+ Add manually</a>
+    <a class="btn primary" href="{% url 'smart_entry' %}">✦ Add with AI</a>
   </form>
   <div style="overflow-x:auto"><table>
-    <thead><tr><th>Date</th><th>Note</th><th>Category</th><th class="right">Amount</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Note</th><th>Category</th><th>Account</th><th class="right">Amount</th><th></th></tr></thead>
     {% for t in page %}<tr>
       <td class="muted">{{ t.date|date:"j M Y" }}</td>
       <td>{{ t.note|default:"—" }}{% if t.ai_generated %} <span class="tag">AI</span>{% endif %}</td>
       <td><span class="row"><i class="dot" style="background:{{ t.category.color|default:'#94A3B8' }}"></i>{{ t.category.name|default:"—" }}</span></td>
+      <td>{% if t.account %}<span class="row">{% include "core/_logo.html" with a=t.account cls="sm" %}{{ t.account.name }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="right"><b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka:2 }}</b></td>
       <td class="right"><form method="post" action="{% url 'transaction_delete' t.pk %}" onsubmit="return confirm('Delete this transaction?')">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn sm danger">Delete</button></form></td>
-    </tr>{% empty %}<tr><td colspan="5" class="muted">No transactions found.</td></tr>{% endfor %}
+    </tr>{% empty %}<tr><td colspan="6" class="muted">No transactions found.</td></tr>{% endfor %}
   </table></div>
   {% if page.paginator.num_pages > 1 %}<div class="row between" style="margin-top:14px"><span class="sm muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
     <span class="row">{% if page.has_previous %}<a class="btn sm" href="?{{ qs }}&page={{ page.previous_page_number }}">← Prev</a>{% endif %}{% if page.has_next %}<a class="btn sm" href="?{{ qs }}&page={{ page.next_page_number }}">Next →</a>{% endif %}</span></div>{% endif %}

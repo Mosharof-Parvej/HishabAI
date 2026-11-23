@@ -56,6 +56,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context.shell",
             ],
         },
     }
@@ -94,7 +95,7 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # --- App settings ---
-TRIAL_DAYS = 30
+TRIAL_DAYS = 15
 PLANS = {
     "monthly": {"label": "Monthly", "price": 149, "days": 30},
     "yearly": {"label": "Yearly", "price": 1299, "days": 365},

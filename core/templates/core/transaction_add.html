@@ -1,0 +1,36 @@
+{% extends "core/base.html" %}
+{% block title %}Add transaction{% endblock %}
+{% block heading %}Add manually{% endblock %}
+{% block sub %}Record an income or expense yourself — no AI needed{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px">
+  {% if error %}<div class="msg error" style="margin-bottom:14px">{{ error }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    <div class="seg" style="margin-bottom:16px" id="kindseg">
+      <a href="#" data-k="expense" class="on">Expense</a><a href="#" data-k="income">Income</a>
+    </div>
+    <input type="hidden" name="kind" id="kind" value="{{ v.kind|default:'expense' }}">
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="field"><label>Amount (৳)</label><input name="amount" type="number" min="0.01" step="0.01" required value="{{ v.amount }}" placeholder="0.00" autofocus></div>
+      <div class="field"><label>Date</label><input name="date" type="date" max="{{ today|date:'Y-m-d' }}" required value="{{ v.date|default:today|date:'Y-m-d' }}"></div>
+      <div class="field"><label>Category</label><select name="category" id="cat" required></select></div>
+      <div class="field"><label>Account</label><select name="account"><option value="">No account</option>{% for a in accts %}<option value="{{ a.id }}" {% if v.account == a.id|stringformat:'s' %}selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field"><label>Note</label><input name="note" maxlength="200" value="{{ v.note }}" placeholder="e.g. Lunch"></div>
+    <div class="row"><button class="btn primary">Save</button><button class="btn" name="again" value="1">Save &amp; add another</button><a class="btn" href="{% url 'transactions' %}">Cancel</a></div>
+  </form>
+</div>
+{{ cats|json_script:"cats-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+const CATS = JSON.parse(document.getElementById("cats-data").textContent), want = "{{ v.category }}";
+const kind = document.getElementById("kind"), cat = document.getElementById("cat");
+function paint(keep) {
+  cat.innerHTML = CATS.filter(c => c.kind === kind.value).map(c => `<option value="${c.id}" ${String(c.id) === keep ? "selected" : ""}>${c.name.replace(/&/g, "&amp;")}</option>`).join("");
+  document.querySelectorAll("#kindseg a").forEach(a => a.classList.toggle("on", a.dataset.k === kind.value));
+}
+document.querySelectorAll("#kindseg a").forEach(a => a.onclick = e => { e.preventDefault(); kind.value = a.dataset.k; paint(""); });
+paint(want);
+</script>
+{% endblock %}

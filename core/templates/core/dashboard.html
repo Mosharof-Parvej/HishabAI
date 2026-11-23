@@ -7,6 +7,7 @@
   <span class="spark">✦</span>
   <input name="text" placeholder="Tell AI what you spent or earned… e.g. “Lunch 250 tk, rickshaw 60 tk”" required>
   <button class="btn primary" type="submit">Add with AI</button>
+  <a class="btn" href="{% url 'transaction_add' %}">+ Add manually</a>
 </form>
 <div class="grid g4" style="margin-bottom:16px">
   <div class="card stat"><div class="lbl">Total Income <span class="chip g">+</span></div><div class="val">{{ cur.income|taka }}</div>
@@ -23,6 +24,14 @@
     <div style="flex:1">{% for c in cats %}<div class="row between sm" style="padding:3px 0"><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.name }}</span><b>{{ c.share }}%</b></div>{% endfor %}</div></div>
     {% else %}<p class="muted">No expenses yet this month.</p>{% endif %}</div>
 </div>
+<div class="grid g2e" style="margin-bottom:16px">
+  <div class="card"><div class="row between"><h3>Accounts <span class="muted sm">· {{ accounts_total|taka }}</span></h3><a class="income sm" href="{% url 'accounts' %}"><b>Manage →</b></a></div>
+    {% for a, bal in accounts %}<div class="tx">{% include "core/_logo.html" with a=a %}<div class="grow"><b>{{ a.name }}</b><div class="sm muted">{{ a.get_kind_display }}</div></div><b {% if bal < 0 %}class="expense"{% endif %}>{{ bal|taka }}</b></div>{% endfor %}</div>
+  <div class="card"><div class="row between"><h3>Debts</h3><a class="income sm" href="{% url 'debts' %}"><b>Manage →</b></a></div>
+    <div class="row between" style="padding:8px 0"><span class="muted">You owe</span><b class="expense">{{ debt_totals.owe|taka }}</b></div>
+    <div class="row between" style="padding:8px 0"><span class="muted">Owed to you</span><b class="income">{{ debt_totals.owed|taka }}</b></div>
+    {% for r in reminders|slice:":3" %}<div class="rem"><span><b>{{ r.debt.person }}</b> <span class="sm muted">{{ r.remaining|taka }}</span></span><span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days < 0 %}overdue{% elif r.days == 0 %}today{% else %}in {{ r.days }}d{% endif %}</span></div>{% endfor %}</div>
+</div>
 <div class="grid g2e">
   <div class="card"><div class="row between"><h3>Recent Transactions</h3><a class="income sm" href="{% url 'transactions' %}"><b>View all →</b></a></div>
     {% for t in recent %}<div class="tx"><span class="ic" style="background:{{ t.category.color|default:'#94A3B8' }}22;color:{{ t.category.color|default:'#64748B' }}">{{ t.category.name|default:"?"|slice:":1" }}</span>
@@ -30,7 +39,7 @@
       <b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka }}</b></div>
     {% empty %}<p class="muted">Nothing yet — try the AI bar above.</p>{% endfor %}</div>
   <div class="card insight"><h3><span class="spark">✦</span> AI Insight</h3><p id="insight" class="muted">Analysing your spending…</p>
-    <p style="margin-top:12px"><a class="income" href="{% url 'assistant' %}"><b>Ask the assistant →</b></a></p></div>
+    <p style="margin-top:12px"><a class="income" href="{% url 'ask' %}"><b>Ask AskHishabAI →</b></a></p></div>
 </div>
 {{ series|json_script:"series-data" }}{{ donut|json_script:"donut-data" }}
 {% endblock %}

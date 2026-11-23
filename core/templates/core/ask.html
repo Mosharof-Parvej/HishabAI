@@ -1,0 +1,46 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}AskHishabAI{% endblock %}
+{% block heading %}AskHishabAI{% endblock %}
+{% block sub %}Ask in Bangla or English — get your matching transactions, income, expense and hisab{% endblock %}
+{% block content %}
+<form class="aibar" id="form"><span class="spark">✦</span>
+  <input id="q" maxlength="500" autocomplete="off" placeholder="e.g. How much did I spend on food this month?  /  গত মাসে বিকাশে কত খরচ করেছি?" required>
+  <button type="button" class="btn" id="mic">🎤</button><button class="btn primary" id="go">Ask</button></form>
+<div class="chips" id="chips">{% for s in suggested %}<button type="button" class="btn sm">{{ s }}</button>{% endfor %}</div>
+<div class="msg error" id="err" style="display:none;margin:14px 0"></div>
+<div id="out" style="margin-top:16px"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtDate = d => new Date(d + "T00:00").toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"});
+function stat(label, val, cls = "") { return `<div class="card stat"><div class="lbl">${label}</div><div class="val ${cls}">${val}</div></div>`; }
+function render(d) {
+  if (d.intent === "debts") {
+    $("out").innerHTML = `<h2 style="font-size:18px;margin-bottom:12px">${esc(d.title)}</h2>
+      <div class="grid g2e" style="margin-bottom:16px">${stat("You owe", taka(d.totals.owe), "expense")}${stat("Owed to you", taka(d.totals.owed), "income")}</div>
+      <div class="card"><table><thead><tr><th>Person</th><th>Type</th><th class="right">Amount</th><th class="right">Remaining</th><th>Repay by</th><th>Status</th></tr></thead><tbody>` +
+      (d.debts.map(x => `<tr><td><b>${esc(x.person)}</b></td><td>${x.direction === "borrowed" ? "I owe" : "Owes me"}</td><td class="right">${taka(x.amount)}</td><td class="right"><b>${taka(x.remaining)}</b></td><td>${x.due ? fmtDate(x.due) : "—"}</td><td>${esc(x.status.replace("_", " "))}</td></tr>`).join("") || '<tr><td colspan="6" class="muted">No debts found.</td></tr>') + "</tbody></table></div>";
+    return;
+  }
+  const s = d.summary;
+  $("out").innerHTML = `<h2 style="font-size:18px;margin-bottom:6px">${esc(d.title)}</h2>
+    <div class="row wrap sm" style="margin-bottom:12px">${d.filters.map(f => `<span class="tag">${esc(f)}</span>`).join("")}</div>
+    <div class="grid g4" style="margin-bottom:16px">${stat("Income", taka(s.income), "income")}${stat("Expense", taka(s.expense), "expense")}${stat("Balance", taka(s.balance))}${stat("Transactions", s.count)}</div>
+    <div class="card"><div style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Note</th><th>Category</th><th>Account</th><th class="right">Amount</th></tr></thead><tbody>` +
+    (d.rows.map(t => `<tr><td class="muted">${fmtDate(t.date)}</td><td>${esc(t.note) || "—"}</td><td><span class="row"><i class="dot" style="background:${esc(t.color)}"></i>${esc(t.category) || "—"}</span></td><td>${esc(t.account) || "—"}</td><td class="right"><b class="${t.kind}">${t.kind === "expense" ? "−" : "+"}${taka(t.amount)}</b></td></tr>`).join("") || '<tr><td colspan="5" class="muted">Nothing matched your question.</td></tr>') +
+    `</tbody></table></div>${s.count > d.shown ? `<p class="sm muted" style="margin-top:10px">Showing ${d.shown} of ${s.count}. Totals above include all ${s.count}.</p>` : ""}</div>`;
+}
+async function ask(text) {
+  text = text.trim(); if (!text) return;
+  $("q").value = text; $("err").style.display = "none"; $("go").disabled = true; $("go").textContent = "Searching…";
+  try { render(await api("{% url 'api_ask' %}", {question: text})); }
+  catch (e) { $("err").textContent = e.message; $("err").style.display = "block"; $("out").innerHTML = ""; }
+  $("go").disabled = false; $("go").textContent = "Ask";
+}
+$("form").onsubmit = e => { e.preventDefault(); ask($("q").value); };
+document.querySelectorAll("#chips button").forEach(b => b.onclick = () => ask(b.textContent));
+voice($("mic"), $("q"));
+</script>
+{% endblock %}

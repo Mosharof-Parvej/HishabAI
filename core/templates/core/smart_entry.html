@@ -15,19 +15,21 @@
 <div class="card" id="review" style="display:none">
   <h3><span class="spark">✦</span> AI found <span id="count">0</span> transaction(s)</h3>
   <p class="muted sm" style="margin-bottom:8px">Review the details below. You can change any field before saving.</p>
-  <div style="overflow-x:auto"><table><thead><tr><th>Type</th><th>Amount</th><th>Category</th><th>Date</th><th>Note</th><th>AI confidence</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
-  <p style="margin-top:8px"><a href="#" class="income sm" id="addrow"><b>+ Add a row manually</b></a></p>
+  <div style="overflow-x:auto"><table><thead><tr><th>Type</th><th>Amount</th><th>Category</th><th>Account</th><th>Date</th><th>Note</th><th>AI confidence</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <p style="margin-top:8px"><a href="#" class="income sm" id="addrow"><b>+ Add a row manually</b></a> <span class="muted sm">· or use the <a href="{% url 'transaction_add' %}" class="income"><b>full manual form</b></a></span></p>
   <div class="notice row between wrap" style="margin-top:14px">
     <span>ⓘ Nothing is saved until you click Confirm. AI can make mistakes — please check amounts and categories.</span>
     <span class="sm">Total expense: <b id="te">৳0</b> · Total income: <b id="ti" class="income">৳0</b></span>
   </div>
   <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" id="discard">Discard</button><button class="btn primary" id="save">Confirm &amp; Save</button></div>
 </div>
-{{ cats|json_script:"cats-data" }}
+{{ cats|json_script:"cats-data" }}{{ accts|json_script:"accts-data" }}
 {% endblock %}
 {% block scripts %}
 <script>
 const CATS = JSON.parse(document.getElementById("cats-data").textContent);
+const ACCTS = JSON.parse(document.getElementById("accts-data").textContent);
+const acctOpts = sel => '<option value="">—</option>' + ACCTS.map(a => `<option ${a === sel ? "selected" : ""}>${esc(a)}</option>`).join("");
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const today = "{{ today|date:'Y-m-d' }}";
@@ -43,6 +45,7 @@ function addRow(t) {
     <td><select class="k" style="width:105px"><option value="expense" ${t.type==="expense"?"selected":""}>Expense</option><option value="income" ${t.type==="income"?"selected":""}>Income</option></select></td>
     <td><input class="a" type="number" min="0.01" step="0.01" value="${esc(t.amount)}" style="width:110px"></td>
     <td><select class="c" style="width:150px">${catOpts(t.type, t.category)}</select></td>
+    <td><select class="ac" style="width:130px">${acctOpts(t.account || ACCTS[0])}</select></td>
     <td><input class="d" type="date" max="${today}" value="${esc(t.date || today)}" style="width:140px"></td>
     <td><input class="n" value="${esc(t.note)}" maxlength="200"></td>
     <td style="width:120px">${conf == null ? '<span class="muted sm">manual</span>' : `<div class="bar ${conf<80?"warn":""}"><i style="width:${conf}%"></i></div><span class="sm">${conf}%</span>`}</td>
@@ -74,7 +77,7 @@ $("addrow").onclick = e => { e.preventDefault(); addRow({type:"expense", amount:
 $("discard").onclick = () => { $("rows").innerHTML = ""; $("review").style.display = "none"; };
 $("save").onclick = async () => {
   const items = [...document.querySelectorAll("#rows tr")].map(tr => ({
-    type: tr.querySelector(".k").value, amount: tr.querySelector(".a").value, category: tr.querySelector(".c").value,
+    type: tr.querySelector(".k").value, amount: tr.querySelector(".a").value, category: tr.querySelector(".c").value, account: tr.querySelector(".ac").value,
     date: tr.querySelector(".d").value, note: tr.querySelector(".n").value, ai: !!tr.dataset.ai, confidence: tr.dataset.conf === "" ? null : +tr.dataset.conf}));
   $("save").disabled = true;
   try { await api("{% url 'api_save_transactions' %}", {transactions: items}); location.href = "{% url 'dashboard' %}"; }

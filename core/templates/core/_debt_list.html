@@ -1,0 +1,12 @@
+{% load ui %}{% for r in rows %}
+<div class="debt {{ r.status }}">
+  <div class="row between"><b>{{ r.debt.person }}</b>
+    <span>{% if r.status == 'settled' %}<span class="pill income">Settled</span>{% elif r.status == 'overdue' %}<span class="pill expense">{{ r.days|stringformat:"d"|cut:"-" }}d overdue</span>{% elif r.status == 'due_soon' %}<span class="pill warnp">{% if r.days == 0 %}Due today{% else %}Due in {{ r.days }}d{% endif %}</span>{% endif %}</span></div>
+  <div class="row between sm"><span class="muted">{{ r.debt.amount|taka }} · {{ r.debt.date|date:"j M Y" }}{% if r.debt.due_date %} · repay by {{ r.debt.due_date|date:"j M Y" }}{% endif %}{% if r.debt.account %} · {{ r.debt.account.name }}{% endif %}</span><b>{{ r.remaining|taka }} left</b></div>
+  {% if r.debt.note %}<div class="sm muted">{{ r.debt.note }}</div>{% endif %}
+  <div class="bar"><i style="width:{% widthratio r.paid r.debt.amount 100 %}%"></i></div>
+  <div class="row between">
+    {% if r.status != 'settled' %}<form method="post" action="{% url 'debt_pay' r.debt.pk %}" class="row">{% csrf_token %}<input name="amount" type="number" min="0.01" step="0.01" max="{{ r.remaining }}" placeholder="Repayment ৳" required style="width:130px"><button class="btn sm outline">{% if r.debt.direction == 'borrowed' %}I repaid{% else %}They repaid{% endif %}</button></form>{% else %}<span></span>{% endif %}
+    <form method="post" action="{% url 'debt_delete' r.debt.pk %}" onsubmit="return confirm('Delete this debt and its repayments?')">{% csrf_token %}<button class="btn sm danger">Delete</button></form></div>
+</div>
+{% empty %}<p class="muted">Nothing here.</p>{% endfor %}

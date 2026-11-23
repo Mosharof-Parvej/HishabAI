@@ -22,8 +22,10 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
-from . import ai, services
-from .models import AIInsight, Budget, Category, ChatMessage, Transaction, User
+from django.templatetags.static import static
+
+from . import ai, catalog, services
+from .models import AIInsight, Account, Budget, Category, Debt, DebtPayment, Transaction, User
 
 # ---------------------------------------------------------------- helpers
 
@@ -71,6 +73,21 @@ def category_names(user):
     for c in Category.objects.filter(user=user):
         cats[c.kind].append(c.name)
     return cats
+
+
+def account_names(user):
+    return list(Account.objects.filter(user=user).values_list("name", flat=True))
+
+
+def parse_date(value, default=None):
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
+        return default
+
+
+def user_account(user, pk):
+    return Account.objects.filter(user=user, pk=pk).first() if str(pk or "").isdigit() else None
 
 
 def money(value):
@@ -213,6 +230,11 @@ def dashboard(request):
                   "colors": [c["color"] for c in cats[:6]]},
         "nav": "dashboard",
     }
+    balances = services.account_balances(request.user)
+    ctx["accounts"] = balances
+    ctx["accounts_total"] = sum((b for _, b in balances), Decimal(0))
+    rows = services.debt_rows(request.user, today)
+    ctx["debt_totals"] = services.debt_totals(rows)
     return render(request, "core/dashboard.html", ctx)
 
 
@@ -237,7 +259,7 @@ def api_insight(request):
 def smart_entry(request):
     cats = list(Category.objects.filter(user=request.user).values("name", "kind"))
     return render(request, "core/smart_entry.html",
-                  {"nav": "entry", "cats": cats, "prefill": request.GET.get("text", "")[:2000], "today": timezone.localdate()})
+                  {"nav": "entry", "cats": cats, "accts": account_names(request.user), "prefill": request.GET.get("text", "")[:2000], "today": timezone.localdate()})
 
 
 @require_POST
@@ -246,7 +268,7 @@ def api_extract(request):
     text = str(body_json(request).get("text", "")).strip()
     if not text:
         return JsonResponse({"error": "Write something first."}, status=400)
-    rows = ai.extract_transactions(request.user, text, category_names(request.user))
+    rows = ai.extract_transactions(request.user, text, category_names(request.user), account_names(request.user))
     if not rows:
         return JsonResponse({"error": "I couldn't find any transaction in that text."}, status=422)
     return JsonResponse({"transactions": rows})
@@ -259,6 +281,7 @@ def api_save_transactions(request):
     if not isinstance(items, list) or not 0 < len(items) <= 50:
         return JsonResponse({"error": "Nothing to save."}, status=400)
     cats = {(c.kind, c.name): c for c in Category.objects.filter(user=request.user)}
+    accts = {a.name: a for a in Account.objects.filter(user=request.user)}
     today = timezone.localdate()
     objs = []
     for i, t in enumerate(items, 1):
@@ -273,7 +296,8 @@ def api_save_transactions(request):
             return JsonResponse({"error": f"Row {i} has an invalid amount, category or date."}, status=400)
         conf = t.get("confidence")
         objs.append(Transaction(
-            user=request.user, kind=kind, amount=amount, category=cat, date=d, note=str(t.get("note", ""))[:200],
+            user=request.user, kind=kind, amount=amount, category=cat, account=accts.get(t.get("account")), date=d,
+            note=str(t.get("note", ""))[:200],
             ai_generated=bool(t.get("ai")), ai_confidence=int(conf) if isinstance(conf, (int, float)) else None))
     Transaction.objects.bulk_create(objs)
     return JsonResponse({"saved": len(objs)})
@@ -291,6 +315,9 @@ def _filtered(request):
         qs = qs.filter(kind=kind)
     if cat.isdigit():
         qs = qs.filter(category_id=int(cat))
+    acc = request.GET.get("acc", "")
+    if acc.isdigit():
+        qs = qs.filter(account_id=int(acc))
     return qs
 
 
@@ -301,7 +328,30 @@ def transactions(request):
     params.pop("page", None)
     return render(request, "core/transactions.html", {
         "nav": "transactions", "page": page, "cats": Category.objects.filter(user=request.user),
+        "accts": Account.objects.filter(user=request.user),
         "qs": params.urlencode(), "f": request.GET})
+
+
+@login_required
+def transaction_add(request):
+    cats = list(Category.objects.filter(user=request.user).values("id", "name", "kind"))
+    accts = Account.objects.filter(user=request.user)
+    today = timezone.localdate()
+    ctx = {"nav": "transactions", "cats": cats, "accts": accts, "today": today, "v": {}}
+    if request.method == "POST":
+        p = request.POST
+        kind = p.get("kind")
+        amount = money(p.get("amount"))
+        cat = Category.objects.filter(user=request.user, pk=p.get("category") or 0, kind=kind).first() if p.get("category", "").isdigit() else None
+        d = parse_date(p.get("date"))
+        if kind not in ("expense", "income") or amount is None or cat is None or d is None or d > today:
+            ctx.update(v=p, error="Please enter a valid type, amount, category and a date that is not in the future.")
+            return render(request, "core/transaction_add.html", ctx)
+        Transaction.objects.create(user=request.user, kind=kind, amount=amount, category=cat,
+                                   account=user_account(request.user, p.get("account")), date=d, note=p.get("note", "").strip()[:200])
+        messages.success(request, "Transaction added.")
+        return redirect("transaction_add" if p.get("again") else "transactions")
+    return render(request, "core/transaction_add.html", ctx)
 
 
 @require_POST
@@ -385,39 +435,164 @@ def api_budget_suggestions(request):
 
 SUGGESTED = [
     "How much did I spend on food this month?",
-    "Which category did I spend most on?",
-    "Compare this month with last month",
-    "Am I within my budgets?",
-    "এই মাসে কত টাকা সঞ্চয় করতে পারবো?",
-    "Give me 3 tips to save more",
+    "Show my biggest expenses last month",
+    "এই মাসে আমার মোট আয় কত?",
+    "bKash diye ki ki kinechi?",
+    "Who do I owe money to?",
+    "আমার কাছে কার কত পাওনা?",
 ]
 
 
 @login_required
-def assistant(request):
-    today = timezone.localdate()
-    first, last = services.month_bounds(today.year, today.month)
-    t = services.totals(request.user, first, last)
-    top = (services.category_spend(request.user, first, last) or [None])[0]
-    budgets_ = services.budget_status(request.user, first, last)
-    used = round(sum(b["spent"] for b in budgets_) / sum(b["limit"] for b in budgets_) * 100) if budgets_ else 0
-    history = list(ChatMessage.objects.filter(user=request.user).order_by("-id")[:30])[::-1]
-    return render(request, "core/assistant.html", {
-        "nav": "assistant", "history": history, "suggested": SUGGESTED, "t": t, "top": top,
-        "budget_used": used, "days_left": (last - today).days})
+def ask(request):
+    return render(request, "core/ask.html", {"nav": "ask", "suggested": SUGGESTED})
+
+
+def _filter_labels(f):
+    out = []
+    if f["date_from"] or f["date_to"]:
+        out.append(f"{f['date_from'] or '…'} → {f['date_to'] or 'today'}")
+    if f["kind"]:
+        out.append(f["kind"].title())
+    out += f["categories"] + f["accounts"]
+    if f["search"]:
+        out.append(f"“{f['search']}”")
+    return out
 
 
 @require_POST
 @ai_endpoint
-def api_chat(request):
-    q = str(body_json(request).get("message", "")).strip()[:1000]
+def api_ask(request):
+    q = str(body_json(request).get("question", "")).strip()[:500]
     if not q:
         return JsonResponse({"error": "Type a question."}, status=400)
-    history = list(ChatMessage.objects.filter(user=request.user).order_by("-id")[:6])[::-1]
-    answer = ai.chat(request.user, q, services.ai_context(request.user, timezone.localdate()), history)
-    ChatMessage.objects.bulk_create([ChatMessage(user=request.user, role="user", content=q),
-                                     ChatMessage(user=request.user, role="assistant", content=answer)])
-    return JsonResponse({"answer": answer})
+    user, today = request.user, timezone.localdate()
+    f = ai.parse_query(user, q, category_names(user), account_names(user))
+    if f["intent"] == "debts":
+        rows = services.debt_rows(user, today)
+        if f["direction"]:
+            rows = [r for r in rows if r["debt"].direction == f["direction"]]
+        if f["person"]:
+            rows = [r for r in rows if f["person"].lower() in r["debt"].person.lower()]
+        rows = [r for r in rows if r["status"] != "settled"] or rows
+        return JsonResponse({"intent": "debts", "title": f["title"], "totals": {k: float(v) for k, v in services.debt_totals(rows).items()},
+                             "debts": [{"person": r["debt"].person, "direction": r["debt"].direction, "amount": float(r["debt"].amount),
+                                        "remaining": float(r["remaining"]), "due": r["debt"].due_date.isoformat() if r["debt"].due_date else None,
+                                        "status": r["status"]} for r in rows[:100]]})
+    qs, summary = services.run_transaction_filter(user, f)
+    return JsonResponse({
+        "intent": "transactions", "title": f["title"], "filters": _filter_labels(f),
+        "summary": {k: float(v) for k, v in summary.items()}, "shown": min(summary["count"], f["limit"]),
+        "rows": [{"date": t.date.isoformat(), "kind": t.kind, "amount": float(t.amount), "note": t.note,
+                  "category": t.category.name if t.category else "", "color": t.category.color if t.category else "#94A3B8",
+                  "account": t.account.name if t.account else ""} for t in qs]})
+
+
+# ---------------------------------------------------------------- accounts
+
+
+@login_required
+def accounts(request):
+    balances = services.account_balances(request.user)
+    providers = [{"key": p["key"], "name": p["name"], "kind": p["kind"],
+                  "logo": static(catalog.logo_file(p["key"])) if catalog.logo_file(p["key"]) else None}
+                 for p in catalog.PROVIDERS.values() if p["kind"] != "cash"]
+    return render(request, "core/accounts.html", {
+        "nav": "accounts", "balances": balances, "total": sum((b for _, b in balances), Decimal(0)),
+        "providers": providers, "cash_logo": static(catalog.logo_file("cash")), "error": request.GET.get("error", "")[:200]})
+
+
+@require_POST
+@login_required
+def accounts_add(request):
+    p = request.POST
+    kind, key = p.get("kind"), p.get("provider", "")
+    fail = lambda m: redirect(reverse("accounts") + "?" + urlencode({"error": m}))  # noqa: E731
+    if kind not in dict(Account.KINDS):
+        return fail("Choose an account type.")
+    if kind == "cash":
+        key = "cash"
+    elif catalog.PROVIDERS.get(key, {}).get("kind") != kind:
+        return fail("Choose a bank, wallet or card from the list.")
+    name = (p.get("name") or catalog.PROVIDERS[key]["name"]).strip()[:60]
+    try:
+        opening = Decimal(p.get("opening_balance") or "0").quantize(Decimal("0.01"))
+        if abs(opening) > Decimal("99999999999"):
+            raise InvalidOperation
+    except InvalidOperation:
+        return fail("Opening balance must be a number.")
+    if Account.objects.filter(user=request.user, name__iexact=name).exists():
+        return fail(f"You already have an account named “{name}”.")
+    Account.objects.create(user=request.user, kind=kind, provider=key, name=name, opening_balance=opening)
+    messages.success(request, f"{name} added.")
+    return redirect("accounts")
+
+
+@require_POST
+@login_required
+def accounts_delete(request, pk):
+    acc = Account.objects.filter(user=request.user, pk=pk).first()
+    if acc:
+        acc.delete()  # its transactions stay, just unassigned
+        messages.success(request, f"{acc.name} removed. Its transactions were kept.")
+    return redirect("accounts")
+
+
+# ---------------------------------------------------------------- debts
+
+
+@login_required
+def debts(request):
+    today = timezone.localdate()
+    rows = services.debt_rows(request.user, today)
+    return render(request, "core/debts.html", {
+        "nav": "debts", "today": today, "totals": services.debt_totals(rows),
+        "owe": [r for r in rows if r["debt"].direction == "borrowed"],
+        "owed": [r for r in rows if r["debt"].direction == "lent"],
+        "accts": Account.objects.filter(user=request.user), "error": request.GET.get("error", "")[:200]})
+
+
+@require_POST
+@login_required
+def debt_add(request):
+    p, today = request.POST, timezone.localdate()
+    fail = lambda m: redirect(reverse("debts") + "?" + urlencode({"error": m}))  # noqa: E731
+    amount, person = money(p.get("amount")), p.get("person", "").strip()[:80]
+    d = parse_date(p.get("date"), today)
+    due = parse_date(p.get("due_date")) if p.get("due_date") else None
+    if p.get("direction") not in ("borrowed", "lent") or not person or amount is None:
+        return fail("Enter who, how much and whether you borrowed or lent.")
+    if due and due < d:
+        return fail("The due date cannot be before the date of the loan.")
+    Debt.objects.create(user=request.user, direction=p["direction"], person=person, amount=amount, date=d, due_date=due,
+                        account=user_account(request.user, p.get("account")), note=p.get("note", "").strip()[:200])
+    messages.success(request, "Saved.")
+    return redirect("debts")
+
+
+@require_POST
+@login_required
+def debt_pay(request, pk):
+    debt = Debt.objects.filter(user=request.user, pk=pk).first()
+    fail = lambda m: redirect(reverse("debts") + "?" + urlencode({"error": m}))  # noqa: E731
+    if not debt:
+        return redirect("debts")
+    row = next(r for r in services.debt_rows(request.user, timezone.localdate()) if r["debt"].pk == debt.pk)
+    amount = money(request.POST.get("amount"))
+    if amount is None or amount > row["remaining"]:
+        return fail(f"Enter an amount between ৳0.01 and the remaining ৳{row['remaining']:.2f}.")
+    DebtPayment.objects.create(debt=debt, amount=amount, date=parse_date(request.POST.get("date"), timezone.localdate()),
+                               account=user_account(request.user, request.POST.get("account")) or debt.account)
+    messages.success(request, "Payment recorded.")
+    return redirect("debts")
+
+
+@require_POST
+@login_required
+def debt_delete(request, pk):
+    Debt.objects.filter(user=request.user, pk=pk).delete()
+    messages.success(request, "Deleted.")
+    return redirect("debts")
 
 
 # ---------------------------------------------------------------- subscription & settings

@@ -96,3 +96,23 @@ td{padding:10px 8px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
 @media(max-width:1000px){.g4{grid-template-columns:1fr 1fr}.g2,.g2e,.plans{grid-template-columns:1fr}.auth{grid-template-columns:1fr}.auth-l{display:none}}
 @media(max-width:760px){.app{grid-template-columns:1fr}.side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line)}.trial,.brand{display:none}main{padding:16px}.search{width:130px}.g4{grid-template-columns:1fr}}
 @media print{.side,.top-r,.no-print{display:none!important}.app{display:block}main{padding:0}body{background:#fff}}
+/* logos, accounts, debts, reminders */
+.lg{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--line);padding:3px;flex:none}
+.lg.sm{width:22px;height:22px;border-radius:6px;padding:2px}.lg.big{width:42px;height:42px}
+.lg.fb{display:inline-grid;place-items:center;background:var(--primary-50);color:var(--primary-d);font-weight:700;padding:0}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:340px;overflow:auto;padding:2px}
+.pitem{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;font:inherit;text-align:left}
+.pitem span{font-size:12px;font-weight:600;line-height:1.25}.pitem:hover{border-color:var(--primary)}.pitem.on{border:2px solid var(--primary);background:var(--primary-50)}
+.count{margin-left:auto;background:var(--expense);color:#fff;border-radius:99px;font-size:10px;padding:1px 7px}
+.bell{position:relative}.bell summary{list-style:none;cursor:pointer;position:relative;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:#fff;border:1px solid var(--line)}
+.bell summary::-webkit-details-marker{display:none}
+.dotc{position:absolute;top:-4px;right:-4px;background:var(--expense);color:#fff;border-radius:99px;font-size:10px;padding:1px 5px}
+.pop{position:absolute;right:0;top:42px;width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px #0f172a22;padding:12px;z-index:20}
+.pop h4{margin:0 0 6px;font-size:13px}
+.rem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #F1F5F9}
+.pill.warnp{background:var(--warn-50);color:#B45309}
+.debt{padding:12px 0;border-bottom:1px solid #F1F5F9;display:grid;gap:6px}.debt:last-child{border:0}
+.debt.overdue{background:linear-gradient(90deg,var(--expense-50),transparent);margin:0 -16px;padding:12px 16px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.tag{margin-right:4px}
+@media print{.bell{display:none}}

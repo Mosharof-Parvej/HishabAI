@@ -108,19 +108,21 @@ def _parse_json(text):
 # ---------- features ----------
 
 EXTRACT_SYSTEM = """You extract personal finance transactions from text written in Bangla, English or Banglish.
-Return ONLY JSON: {"transactions":[{"type":"expense|income","amount":number,"category":string,"date":"YYYY-MM-DD","note":string,"confidence":0-100}]}
+Return ONLY JSON: {"transactions":[{"type":"expense|income","amount":number,"category":string,"account":string|null,"date":"YYYY-MM-DD","note":string,"confidence":0-100}]}
 Rules: amounts are in BDT (taka/tk/টাকা/৳); convert Bangla digits to numbers. One object per distinct transaction.
 Resolve relative dates (আজ=today, গতকাল/yesterday, কাল is ambiguous: use yesterday if past tense) using TODAY.
 'category' MUST be exactly one of the provided names for that type. 'note' is a short English label.
+'account' is the wallet/bank/cash the money moved through ONLY if the text says so (e.g. "bkash e", "cash", "card diye"); it MUST be exactly one of the provided ACCOUNTS, else null.
 Set confidence low when the amount, type or category is guessed. Ignore text that is not a transaction."""
 
 
-def extract_transactions(user, text, categories):
+def extract_transactions(user, text, categories, accounts=()):
     today = timezone.localdate()
     prompt = (
         f"TODAY: {today.isoformat()}\n"
         f"EXPENSE CATEGORIES: {', '.join(categories['expense'])}\n"
         f"INCOME CATEGORIES: {', '.join(categories['income'])}\n"
+        f"ACCOUNTS: {', '.join(accounts) or 'none'}\n"
         f"TEXT:\n{text[:2000]}"
     )
     data = _parse_json(ask(user, EXTRACT_SYSTEM, prompt, json_mode=True))
@@ -141,8 +143,9 @@ def extract_transactions(user, text, categories):
             if d > today:
                 d = today
             conf = max(0, min(100, int(t.get("confidence", 70))))
+            acct = t.get("account") if t.get("account") in accounts else None
             rows.append(
-                {"type": kind, "amount": str(amount), "category": cat, "date": d.isoformat(),
+                {"type": kind, "amount": str(amount), "category": cat, "account": acct, "date": d.isoformat(),
                  "note": str(t.get("note", ""))[:200], "confidence": conf}
             )
         except (KeyError, InvalidOperation, ValueError, TypeError):
@@ -150,17 +153,53 @@ def extract_transactions(user, text, categories):
     return rows
 
 
-CHAT_SYSTEM = """You are HishabAI, a friendly personal finance assistant inside an expense tracker used in Bangladesh.
-Answer ONLY from the JSON data provided (the user's own records, amounts in BDT, shown with the ৳ sign).
-Reply in the same language as the user's question (Bangla or English). Be concise (max ~120 words), use concrete numbers,
-and never invent figures. If the data cannot answer, say so. You are not a licensed financial advisor; give practical
-budgeting tips only, no investment/tax/legal advice. Plain text, no markdown tables."""
+QUERY_SYSTEM = """You turn a personal-finance question (Bangla, English or Banglish) into a JSON search filter that a database will run.
+Return ONLY JSON: {"intent":"transactions|debts","title":string,"date_from":"YYYY-MM-DD"|null,"date_to":"YYYY-MM-DD"|null,
+"kind":"expense|income"|null,"categories":[string],"accounts":[string],"search":string|null,"sort":"date|amount|oldest","limit":1-100,
+"direction":"borrowed|lent"|null,"person":string|null}
+Rules: resolve relative dates using TODAY ("this month" = first day of this month..TODAY, "last month" = the whole previous month,
+"this year" = Jan 1..TODAY, "last week" = previous 7 days). No time mentioned -> null dates (all time).
+'categories' and 'accounts' MUST be exact names from the provided lists, otherwise []. 'search' is a keyword for the note text.
+"highest/biggest/most" -> sort "amount". Questions about loans, borrowed or lent money, who owes whom (ধার, দেনা, পাওনা, loan, owe) -> intent "debts":
+'direction' = "borrowed" if the user owes, "lent" if others owe the user, null if unclear; 'person' if a name is mentioned.
+'title' is a short heading in the same language as the question. Never answer the question yourself; only produce the filter."""
 
 
-def chat(user, question, context, history):
-    convo = "\n".join(f"{m.role.upper()}: {m.content}" for m in history[-6:])
-    prompt = f"USER DATA:\n{json.dumps(context, ensure_ascii=False)}\n\nCONVERSATION:\n{convo}\nUSER: {question[:1000]}"
-    return ask(user, CHAT_SYSTEM, prompt)
+def _date_or_none(v, today):
+    try:
+        d = datetime.strptime(str(v), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return min(d, today)
+
+
+def parse_query(user, question, categories, accounts):
+    """AI -> validated filter dict. The AI only builds the filter; numbers always come from the database."""
+    today = timezone.localdate()
+    prompt = (f"TODAY: {today.isoformat()} ({today.strftime('%A')})\n"
+              f"CATEGORIES: {', '.join(categories['expense'] + categories['income'])}\nACCOUNTS: {', '.join(accounts) or 'none'}\n"
+              f"QUESTION: {question[:500]}")
+    raw = _parse_json(ask(user, QUERY_SYSTEM, prompt, json_mode=True))
+    cat_all = {c.lower(): c for c in categories["expense"] + categories["income"]}
+    acc_all = {a.lower(): a for a in accounts}
+    f = {
+        "intent": "debts" if raw.get("intent") == "debts" else "transactions",
+        "title": str(raw.get("title") or question)[:100],
+        "date_from": _date_or_none(raw.get("date_from"), today),
+        "date_to": _date_or_none(raw.get("date_to"), today),
+        "kind": raw.get("kind") if raw.get("kind") in ("expense", "income") else None,
+        "categories": [cat_all[c.lower()] for c in (raw.get("categories") or []) if str(c).lower() in cat_all],
+        "accounts": [acc_all[a.lower()] for a in (raw.get("accounts") or []) if str(a).lower() in acc_all],
+        "search": (str(raw["search"])[:60] if raw.get("search") else None),
+        "sort": raw.get("sort") if raw.get("sort") in ("date", "amount", "oldest") else "date",
+        "direction": raw.get("direction") if raw.get("direction") in ("borrowed", "lent") else None,
+        "person": (str(raw["person"])[:60] if raw.get("person") else None),
+    }
+    try:
+        f["limit"] = max(1, min(100, int(raw.get("limit") or 50)))
+    except (TypeError, ValueError):
+        f["limit"] = 50
+    return f
 
 
 INSIGHT_SYSTEM = """You write one short financial insight (max 2 sentences, under 45 words) for a Bangladeshi expense app

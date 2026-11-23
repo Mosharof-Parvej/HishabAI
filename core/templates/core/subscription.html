@@ -4,11 +4,11 @@
 {% block sub %}Manage your plan and billing{% endblock %}
 {% block content %}
 {% if user.is_paid %}<div class="notice" style="margin-bottom:16px;background:var(--primary-50);border-color:var(--primary-100)"><b>{{ user.plan|title }} plan active</b> until {{ user.paid_until|date:"j F Y" }}.</div>
-{% elif user.has_access %}<div class="notice" style="margin-bottom:16px"><b>Your {{ 30 }}-day free trial ends in {{ user.trial_days_left }} days ({{ user.trial_ends_at|date:"j M Y" }}).</b> Subscribe anytime — all your transactions, budgets and reports stay safe.</div>
+{% elif user.has_access %}<div class="notice" style="margin-bottom:16px"><b>Your {{ TRIAL_DAYS }}-day free trial ends in {{ user.trial_days_left }} days ({{ user.trial_ends_at|date:"j M Y" }}).</b> Subscribe anytime — all your transactions, budgets and reports stay safe.</div>
 {% else %}<div class="notice" style="margin-bottom:16px;background:var(--expense-50);border-color:#FECDD3"><b>Your free trial has ended.</b> Choose a plan to unlock AI features again.</div>{% endif %}
 {% if demo %}<p class="sm muted" style="margin-bottom:12px">Demo mode: choosing a plan activates it without taking payment. Real bKash / Nagad / Rocket / card checkout is not connected yet.</p>{% endif %}
 <div class="plans">
-  <div class="card plan"><span class="tag" style="background:var(--bg);color:var(--muted)">{% if not user.is_paid %}CURRENT PLAN{% else %}TRIAL{% endif %}</span><h2 style="margin-top:8px">Free Trial</h2><div class="price">৳0 <span class="sm muted">/ 30 days</span></div><p class="sm muted">Try every feature, no card needed</p>
+  <div class="card plan"><span class="tag" style="background:var(--bg);color:var(--muted)">{% if not user.is_paid %}CURRENT PLAN{% else %}TRIAL{% endif %}</span><h2 style="margin-top:8px">Free Trial</h2><div class="price">৳0 <span class="sm muted">/ {{ TRIAL_DAYS }} days</span></div><p class="sm muted">Try every feature, no card needed</p>
     <ul><li>All premium features</li><li>AI entry in Bangla &amp; English</li><li>AI financial assistant</li><li>Budgets &amp; reports</li><li>No payment card required</li></ul><button class="btn block" disabled>{% if user.is_paid %}Trial ended{% else %}Current plan{% endif %}</button></div>
   <div class="card plan"><h2>Monthly</h2><div class="price">৳{{ plans.monthly.price }} <span class="sm muted">/ month</span></div><p class="sm muted">Flexible — cancel anytime</p>
     <ul><li>Unlimited AI transaction entry</li><li>AI financial assistant</li><li>Budgets, alerts &amp; insights</li><li>Monthly &amp; yearly reports</li><li>Export reports as PDF</li></ul>
