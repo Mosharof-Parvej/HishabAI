@@ -60,8 +60,8 @@ TEMPLATES = [
     }
 ]
 
-_db = dj_database_url.config(
-    default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=0
+_db = dj_database_url.parse(
+    os.environ.get("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=0
 )
 if _db["ENGINE"].endswith("postgresql"):
     _db["DISABLE_SERVER_SIDE_CURSORS"] = True  # Neon pooler (pgbouncer) safe
