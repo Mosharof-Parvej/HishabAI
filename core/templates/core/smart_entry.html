@@ -15,7 +15,7 @@
 <div class="card" id="review" style="display:none">
   <h3><span class="spark">✦</span> AI found <span id="count">0</span> transaction(s)</h3>
   <p class="muted sm" style="margin-bottom:8px">Review the details below. You can change any field before saving.</p>
-  <div style="overflow-x:auto"><table><thead><tr><th>Type</th><th>Amount</th><th>Category</th><th>Account</th><th>Date</th><th>Note</th><th>AI confidence</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Type</th><th>Amount</th><th>Category</th><th>Account</th><th>Date</th><th>Note</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
   <p style="margin-top:8px"><a href="#" class="income sm" id="addrow"><b>+ Add a row manually</b></a> <span class="muted sm">· or use the <a href="{% url 'transaction_add' %}" class="income"><b>full manual form</b></a></span></p>
   <div class="notice row between wrap" style="margin-top:14px">
     <span>ⓘ Nothing is saved until you click Confirm. AI can make mistakes — please check amounts and categories.</span>
@@ -48,7 +48,6 @@ function addRow(t) {
     <td><select class="ac" style="width:130px">${acctOpts(t.account || ACCTS[0])}</select></td>
     <td><input class="d" type="date" max="${today}" value="${esc(t.date || today)}" style="width:140px"></td>
     <td><input class="n" value="${esc(t.note)}" maxlength="200"></td>
-    <td style="width:120px">${conf == null ? '<span class="muted sm">manual</span>' : `<div class="bar ${conf<80?"warn":""}"><i style="width:${conf}%"></i></div><span class="sm">${conf}%</span>`}</td>
     <td><button class="btn sm danger x" type="button">✕</button></td>`;
   tr.querySelector(".k").onchange = e => { tr.querySelector(".c").innerHTML = catOpts(e.target.value, ""); totals(); };
   tr.querySelector(".x").onclick = () => { tr.remove(); totals(); };
