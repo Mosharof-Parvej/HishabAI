@@ -8,7 +8,7 @@ Stack: Django 5.2 · Neon Postgres · Vercel · Gemini + Grok (free-tier AI, aut
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # then fill in the keys (see section 2)
+touch .env                       # then add the keys listed in section 2 and the table in section 6 (KEY=value, one per line)
 python manage.py migrate
 python manage.py runserver
 ```
@@ -69,7 +69,7 @@ gh repo create hishabai --private --source=. --push     # or create on github.co
 | `SECRET_KEY` | `python -c "import secrets;print(secrets.token_urlsafe(50))"` |
 | `DATABASE_URL` | Neon pooled connection string |
 | `GEMINI_API_KEY` / `GROK_API_KEY` | from section 2 |
-| `AI_PRIMARY`, `GEMINI_MODEL`, `GROK_MODEL`, `GROK_BASE_URL` | optional (defaults in `.env.example`) |
+| `AI_PRIMARY`, `GEMINI_MODEL`, `GROK_MODEL`, `GROK_BASE_URL` | optional (defaults: `gemini`, `gemini-flash-latest`, `grok-4-fast`, `https://api.x.ai/v1`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | optional |
 | `CSRF_TRUSTED_ORIGINS`, `ALLOWED_HOSTS` | only for a custom domain, e.g. `https://expense.example.com`, `expense.example.com` |
 
