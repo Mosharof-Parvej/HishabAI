@@ -22,6 +22,17 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+# Every user starts with these; they can rename/edit them, remove them, or add more.
+DEFAULT_ACCOUNTS = [
+    ("Cash", "cash", "cash"),
+    ("bKash", "wallet", "bkash"),
+    ("Nagad", "wallet", "nagad"),
+    ("Rocket", "wallet", "rocket"),
+    ("Bank", "bank", ""),
+    ("Card", "card", ""),
+]
+
+
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra):
         if not email:
@@ -84,7 +95,8 @@ class User(AbstractBaseUser, PermissionsMixin):
             [Category(user=self, name=n, kind=k, color=c) for n, k, c in DEFAULT_CATEGORIES],
             ignore_conflicts=True,
         )
-        Account.objects.get_or_create(user=self, name="Cash", defaults={"kind": "cash", "provider": "cash"})
+        for name, kind, provider in DEFAULT_ACCOUNTS:
+            Account.objects.get_or_create(user=self, name=name, defaults={"kind": kind, "provider": provider})
 
 
 class Category(models.Model):
@@ -124,7 +136,9 @@ class Account(models.Model):
     def logo(self):
         from .catalog import logo_file
 
-        return logo_file(self.provider) if self.provider else None
+        if self.provider:  # a named provider without a logo file shows an initial badge instead
+            return logo_file(self.provider)
+        return logo_file(self.kind) if self.kind in ("bank", "card") else None  # generic icon
 
     @property
     def initial(self):
@@ -170,6 +184,8 @@ class Debt(models.Model):
     account = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True)
     date = models.DateField(default=timezone.localdate)
     due_date = models.DateField(null=True, blank=True)
+    # Days before the due date to start reminding (0 = on the day); None = no reminder.
+    remind_days = models.PositiveSmallIntegerField(null=True, blank=True, default=3)
     note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -6,12 +6,19 @@
 {% if error %}<div class="msg error" style="margin-bottom:14px">{{ error }}</div>{% endif %}
 <div class="card" style="margin-bottom:16px"><div class="muted sm">Total across accounts</div><div class="stat"><div class="val">{{ total|taka }}</div></div></div>
 <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(250px,1fr));margin-bottom:20px">
-  {% for a, bal in balances %}
+  {% for c in cards %}{% with a=c.a bal=c.bal %}
   <div class="card"><div class="row between"><span class="row">{% include "core/_logo.html" with a=a cls="big" %}<span><b>{{ a.name }}</b><br><span class="sm muted">{{ a.get_kind_display }}</span></span></span>
     <form method="post" action="{% url 'accounts_delete' a.pk %}" onsubmit="return confirm('Remove {{ a.name|escapejs }}? Its transactions are kept.')">{% csrf_token %}<button class="btn sm danger" title="Remove">✕</button></form></div>
     <div class="val" style="font-size:22px;font-weight:700;margin-top:12px;{% if bal < 0 %}color:var(--expense){% endif %}">{{ bal|taka:2 }}</div>
-    <a class="sm income" href="{% url 'transactions' %}?acc={{ a.pk }}"><b>View transactions →</b></a></div>
-  {% endfor %}
+    <div class="row between" style="margin-top:6px"><a class="sm income" href="{% url 'transactions' %}?acc={{ a.pk }}"><b>View transactions →</b></a></div>
+    <details class="edit"><summary class="sm income"><b>Edit</b></summary>
+      <form method="post" action="{% url 'accounts_edit' a.pk %}">{% csrf_token %}
+        <div class="field"><label>Name</label><input name="name" value="{{ a.name }}" maxlength="60" required></div>
+        <div class="field"><label>Current balance (৳)</label><input name="balance" type="number" step="0.01" value="{{ bal|stringformat:'.2f' }}"></div>
+        {% if c.opts %}<div class="field"><label>{% if a.kind == 'wallet' %}Wallet{% elif a.kind == 'bank' %}Bank{% else %}Card network{% endif %} (sets the logo)</label>
+          <select name="provider"><option value="">Generic</option>{% for o in c.opts %}<option value="{{ o.key }}" {% if o.key == a.provider %}selected{% endif %}>{{ o.name }}</option>{% endfor %}</select></div>{% endif %}
+        <button class="btn primary sm">Save</button></form></details></div>
+  {% endwith %}{% endfor %}
 </div>
 <div class="card" id="add"><h3>Add an account</h3>
   <div class="seg" id="tabs" style="margin-bottom:14px"><a href="#" data-k="wallet" class="on">Mobile wallet</a><a href="#" data-k="bank">Bank</a><a href="#" data-k="card">Card</a><a href="#" data-k="cash">Cash</a></div>

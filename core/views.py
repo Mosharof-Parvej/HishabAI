@@ -90,6 +90,16 @@ def user_account(user, pk):
     return Account.objects.filter(user=user, pk=pk).first() if str(pk or "").isdigit() else None
 
 
+REMIND_CHOICES = {0, 1, 3, 7}
+
+
+def parse_remind(value, due):
+    """'' / missing / no due date -> None (no reminder); otherwise one of REMIND_CHOICES."""
+    if due is None or not str(value or "").isdigit() or int(value) not in REMIND_CHOICES:
+        return None
+    return int(value)
+
+
 def money(value):
     try:
         v = Decimal(str(value)).quantize(Decimal("0.01"))
@@ -294,7 +304,7 @@ def api_save_transactions(request):
             if amount is None or d is None or d > today + timedelta(days=1) or not person or (due and due < d):
                 return JsonResponse({"error": f"Row {i}: enter the person, a valid amount and a repay date after the loan date."}, status=400)
             debts.append(Debt(user=request.user, direction=kind, person=person, amount=amount, date=d, due_date=due,
-                              account=accts.get(t.get("account"))))
+                              remind_days=parse_remind(t.get("remind_days"), due), account=accts.get(t.get("account"))))
             continue
         cat = cats.get((kind, t.get("category")))
         if kind not in ("expense", "income") or amount is None or cat is None or d is None or d > today + timedelta(days=1):
@@ -500,11 +510,12 @@ def api_ask(request):
 @login_required
 def accounts(request):
     balances = services.account_balances(request.user)
+    cards = [{"a": a, "bal": bal, "opts": catalog.for_kind(a.kind) if a.kind != "cash" else []} for a, bal in balances]
     providers = [{"key": p["key"], "name": p["name"], "kind": p["kind"],
                   "logo": static(catalog.logo_file(p["key"])) if catalog.logo_file(p["key"]) else None}
                  for p in catalog.PROVIDERS.values() if p["kind"] != "cash"]
     return render(request, "core/accounts.html", {
-        "nav": "accounts", "balances": balances, "total": sum((b for _, b in balances), Decimal(0)),
+        "nav": "accounts", "cards": cards, "total": sum((b for _, b in balances), Decimal(0)),
         "providers": providers, "cash_logo": static(catalog.logo_file("cash")), "error": request.GET.get("error", "")[:200]})
 
 
@@ -531,6 +542,36 @@ def accounts_add(request):
         return fail(f"You already have an account named “{name}”.")
     Account.objects.create(user=request.user, kind=kind, provider=key, name=name, opening_balance=opening)
     messages.success(request, f"{name} added.")
+    return redirect("accounts")
+
+
+@require_POST
+@login_required
+def accounts_edit(request, pk):
+    acc = Account.objects.filter(user=request.user, pk=pk).first()
+    if not acc:
+        return redirect("accounts")
+    p = request.POST
+    fail = lambda m: redirect(reverse("accounts") + "?" + urlencode({"error": m}))  # noqa: E731
+    name = (p.get("name") or acc.name).strip()[:60]
+    if Account.objects.filter(user=request.user, name__iexact=name).exclude(pk=acc.pk).exists():
+        return fail(f"You already have an account named “{name}”.")
+    key = p.get("provider", acc.provider)
+    if acc.kind == "cash":
+        key = "cash"
+    elif key and catalog.PROVIDERS.get(key, {}).get("kind") != acc.kind:
+        return fail("That bank, wallet or card does not match this account type.")
+    try:  # the user types the CURRENT balance; store the opening balance that produces it
+        wanted = Decimal(p.get("balance") or "0").quantize(Decimal("0.01"))
+        if abs(wanted) > Decimal("99999999999"):
+            raise InvalidOperation
+    except InvalidOperation:
+        return fail("Balance must be a number.")
+    current = dict(services.account_balances(request.user))[acc]
+    acc.opening_balance += wanted - current
+    acc.name, acc.provider = name, key
+    acc.save(update_fields=["name", "provider", "opening_balance"])
+    messages.success(request, f"{name} updated.")
     return redirect("accounts")
 
 
@@ -571,6 +612,7 @@ def debt_add(request):
     if due and due < d:
         return fail("The due date cannot be before the date of the loan.")
     Debt.objects.create(user=request.user, direction=p["direction"], person=person, amount=amount, date=d, due_date=due,
+                        remind_days=parse_remind(p.get("remind_days"), due),
                         account=user_account(request.user, p.get("account")), note=p.get("note", "").strip()[:200])
     messages.success(request, "Saved.")
     return redirect("debts")
@@ -590,6 +632,17 @@ def debt_pay(request, pk):
     DebtPayment.objects.create(debt=debt, amount=amount, date=parse_date(request.POST.get("date"), timezone.localdate()),
                                account=user_account(request.user, request.POST.get("account")) or debt.account)
     messages.success(request, "Payment recorded.")
+    return redirect("debts")
+
+
+@require_POST
+@login_required
+def debt_remind(request, pk):
+    debt = Debt.objects.filter(user=request.user, pk=pk).first()
+    if debt and debt.due_date:
+        debt.remind_days = parse_remind(request.POST.get("remind_days"), debt.due_date)
+        debt.save(update_fields=["remind_days"])
+        messages.success(request, "Reminder updated.")
     return redirect("debts")
 
 

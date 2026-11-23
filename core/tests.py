@@ -23,7 +23,7 @@ class AppTests(TestCase):
         u = User.objects.get(email="new@example.com")
         self.assertEqual(u.categories.count(), 12)
         self.assertEqual(u.trial_days_left, 15)
-        self.assertEqual(list(u.accounts.values_list('name', flat=True)), ['Cash'])
+        self.assertEqual(list(u.accounts.values_list('name', flat=True)), ['Cash', 'bKash', 'Nagad', 'Rocket', 'Bank', 'Card'])
         c.post(reverse("logout"))
         self.assertEqual(c.post(reverse("login"), {"email": "new@example.com", "password": "bad"}).status_code, 200)
         self.assertRedirects(c.post(reverse("login"), {"email": "new@example.com", "password": "very-long-pass-1"}), reverse("dashboard"))
@@ -110,7 +110,7 @@ class AppTests(TestCase):
     @patch("core.ai.ask")
     def test_ask_runs_filter_against_database(self, ask):
         food = Category.objects.get(user=self.user, name="Food")
-        bk = Account.objects.create(user=self.user, kind="wallet", provider="bkash", name="bKash")
+        bk = Account.objects.get(user=self.user, name="bKash")
         today = timezone.localdate()
         Transaction.objects.create(user=self.user, kind="expense", amount=250, category=food, account=bk, date=today, note="Lunch")
         Transaction.objects.create(user=self.user, kind="expense", amount=100, category=Category.objects.get(user=self.user, name="Transport"), date=today)
@@ -140,14 +140,32 @@ class AppTests(TestCase):
         self.assertEqual(Transaction.objects.count(), 1)
 
     def test_accounts_add_validates_against_catalog(self):
-        r = self.c.post(reverse("accounts_add"), {"kind": "wallet", "provider": "bkash", "opening_balance": "500"})
+        r = self.c.post(reverse("accounts_add"), {"kind": "wallet", "provider": "bkash", "name": "bKash 2", "opening_balance": "500"})
         self.assertRedirects(r, reverse("accounts"))
-        a = Account.objects.get(provider="bkash")
-        self.assertEqual((a.name, a.opening_balance, a.kind), ("bKash", 500, "wallet"))
-        for bad in [{"kind": "bank", "provider": "bkash"}, {"kind": "wallet", "provider": "nope"}, {"kind": "wallet", "provider": "bkash"}]:  # wrong kind / unknown / duplicate name
+        a = Account.objects.get(name="bKash 2")
+        self.assertEqual((a.provider, a.opening_balance, a.kind), ("bkash", 500, "wallet"))
+        for bad in [{"kind": "bank", "provider": "bkash"}, {"kind": "wallet", "provider": "nope"}, {"kind": "wallet", "provider": "bkash", "name": "bKash"}]:  # wrong kind / unknown / duplicate name
             self.c.post(reverse("accounts_add"), bad)
-        self.assertEqual(Account.objects.filter(user=self.user).count(), 2)  # Cash + bKash
+        self.assertEqual(Account.objects.filter(user=self.user).count(), 7)  # 6 defaults + "bKash 2"
         self.assertContains(self.c.get(reverse("accounts")), "core/logos/bkash.png")
+
+    def test_edit_default_account_sets_balance_name_and_logo(self):
+        from . import services
+        bank = Account.objects.get(user=self.user, name="Bank")
+        Transaction.objects.create(user=self.user, kind="income", amount=300, account=bank)
+        self.c.post(reverse("accounts_edit", args=[bank.pk]), {"name": "BRAC Salary", "balance": "1000", "provider": "brac"})
+        bank.refresh_from_db()
+        self.assertEqual((bank.name, bank.provider), ("BRAC Salary", "brac"))
+        self.assertEqual(dict(services.account_balances(self.user))[bank], 1000)   # typed balance is the CURRENT balance
+        self.assertEqual(bank.opening_balance, 700)
+        self.c.post(reverse("accounts_edit", args=[bank.pk]), {"name": "Cash", "balance": "1000", "provider": "brac"})  # duplicate name
+        self.c.post(reverse("accounts_edit", args=[bank.pk]), {"name": "X", "balance": "1000", "provider": "bkash"})   # wallet logo on a bank
+        bank.refresh_from_db()
+        self.assertEqual((bank.name, bank.provider), ("BRAC Salary", "brac"))
+        other = User.objects.create_user("o@example.com", "s3cret-pass-9")
+        self.c.post(reverse("accounts_edit", args=[Account.objects.get(user=other, name="Cash").pk]), {"name": "Hacked"})
+        self.assertFalse(Account.objects.filter(name="Hacked").exists())
+        self.assertEqual(Account.objects.get(user=self.user, name="Card").logo, "core/logos/card.svg")   # generic icon
 
     def test_account_balance_includes_transactions_and_debts(self):
         from . import services
@@ -175,6 +193,23 @@ class AppTests(TestCase):
         self.assertEqual(late.payments.count(), 1)
         from . import services
         self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Karim"])  # settled debt no longer reminds
+
+    def test_reminder_option_per_debt(self):
+        from . import services
+        today = timezone.localdate()
+        due = (today + timedelta(days=5)).isoformat()
+        base = {"direction": "lent", "person": "Sumi", "amount": "100", "due_date": due}
+        self.c.post(reverse("debt_add"), {**base, "remind_days": "7"})
+        self.c.post(reverse("debt_add"), {**base, "person": "Quiet", "remind_days": ""})
+        self.c.post(reverse("debt_add"), {**base, "person": "Later", "remind_days": "1"})
+        self.c.post(reverse("debt_add"), {**base, "person": "Bad", "remind_days": "99", "due_date": ""})
+        self.assertEqual(sorted(Debt.objects.values_list("person", "remind_days")), [("Bad", None), ("Later", 1), ("Quiet", None), ("Sumi", 7)])
+        self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Sumi"])   # only the 7-day one has started
+        later = Debt.objects.get(person="Later")
+        self.c.post(reverse("debt_remind", args=[later.pk]), {"remind_days": "7"})
+        self.assertEqual(sorted(r["debt"].person for r in services.reminders(self.user, today)), ["Later", "Sumi"])
+        self.c.post(reverse("debt_remind", args=[later.pk]), {"remind_days": ""})
+        self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Sumi"])
 
     def test_debts_are_private(self):
         other = User.objects.create_user("o@example.com", "s3cret-pass-9")

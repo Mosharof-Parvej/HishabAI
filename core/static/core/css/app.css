@@ -116,3 +116,4 @@ td{padding:10px 8px;border-bottom:1px solid #F1F5F9;vertical-align:middle}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .tag{margin-right:4px}
 @media print{.bell{display:none}}
+.edit{margin-top:8px;border-top:1px solid #F1F5F9;padding-top:8px}.edit summary{cursor:pointer;list-style:none}.edit form{margin-top:10px}

@@ -44,14 +44,14 @@ function addRow(t) {
   tr.innerHTML = `
     <td><select class="k" style="width:105px"><option value="expense" ${t.type==="expense"?"selected":""}>Expense</option><option value="income" ${t.type==="income"?"selected":""}>Income</option><option value="borrowed" ${t.type==="borrowed"?"selected":""}>I borrowed</option><option value="lent" ${t.type==="lent"?"selected":""}>I lent</option></select></td>
     <td><input class="a" type="number" min="0.01" step="0.01" value="${esc(t.amount)}" style="width:110px"></td>
-    <td><select class="c" style="width:150px">${catOpts(t.type, t.category)}</select><input class="due" type="date" title="Repay by (optional)" value="${esc(t.due_date || "")}" style="width:150px;display:none"></td>
+    <td><select class="c" style="width:150px">${catOpts(t.type, t.category)}</select><span class="dueb" style="display:none"><input class="due" type="date" title="Repay by (optional)" value="${esc(t.due_date || "")}" style="width:150px"><select class="rem" title="Remind me" style="width:150px;margin-top:4px"><option value="3">🔔 3 days before</option><option value="0">🔔 On the due date</option><option value="1">🔔 1 day before</option><option value="7">🔔 7 days before</option><option value="">No reminder</option></select></span></td>
     <td><select class="ac" style="width:130px">${acctOpts(t.account || ACCTS[0])}</select></td>
     <td><input class="d" type="date" max="${today}" value="${esc(t.date || today)}" style="width:140px"></td>
     <td><input class="n" value="${esc(t.note)}" maxlength="200"></td>
     <td><button class="btn sm danger x" type="button">✕</button></td>`;
   const sync = () => {
     const debt = ["borrowed", "lent"].includes(tr.querySelector(".k").value);
-    tr.querySelector(".c").style.display = debt ? "none" : ""; tr.querySelector(".due").style.display = debt ? "" : "none";
+    tr.querySelector(".c").style.display = debt ? "none" : ""; tr.querySelector(".dueb").style.display = debt ? "" : "none";
     tr.querySelector(".n").placeholder = debt ? "Person, e.g. Rahim" : "";
   };
   tr.querySelector(".k").onchange = e => { if (!["borrowed", "lent"].includes(e.target.value)) tr.querySelector(".c").innerHTML = catOpts(e.target.value, ""); sync(); totals(); };
@@ -83,7 +83,7 @@ $("discard").onclick = () => { $("rows").innerHTML = ""; $("review").style.displ
 $("save").onclick = async () => {
   const items = [...document.querySelectorAll("#rows tr")].map(tr => ({
     type: tr.querySelector(".k").value, amount: tr.querySelector(".a").value, category: tr.querySelector(".c").value, account: tr.querySelector(".ac").value,
-    date: tr.querySelector(".d").value, due_date: tr.querySelector(".due").value, note: tr.querySelector(".n").value, ai: !!tr.dataset.ai, confidence: tr.dataset.conf === "" ? null : +tr.dataset.conf}));
+    date: tr.querySelector(".d").value, due_date: tr.querySelector(".due").value, remind_days: tr.querySelector(".rem").value, note: tr.querySelector(".n").value, ai: !!tr.dataset.ai, confidence: tr.dataset.conf === "" ? null : +tr.dataset.conf}));
   $("save").disabled = true;
   try { await api("{% url 'api_save_transactions' %}", {transactions: items}); location.href = "{% url 'dashboard' %}"; }
   catch (e) { showErr(e.message); $("save").disabled = false; }

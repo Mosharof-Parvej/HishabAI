@@ -141,11 +141,13 @@ def debt_rows(user, today, open_only=False):
         paid = d.paid or ZERO
         remaining = d.amount - paid
         days = (d.due_date - today).days if d.due_date else None
+        window = d.remind_days if d.remind_days is not None else REMIND_DAYS
         status = ("settled" if remaining <= 0 else "overdue" if days is not None and days < 0
-                  else "due_soon" if days is not None and days <= REMIND_DAYS else "open")
+                  else "due_soon" if days is not None and days <= window else "open")
         if open_only and status == "settled":
             continue
-        rows.append({"debt": d, "paid": paid, "remaining": remaining, "days": days, "status": status})
+        notify = d.remind_days is not None and days is not None and days <= d.remind_days and remaining > 0
+        rows.append({"debt": d, "paid": paid, "remaining": remaining, "days": days, "status": status, "notify": notify})
     return rows
 
 
@@ -159,8 +161,8 @@ def debt_totals(rows):
 
 
 def reminders(user, today):
-    """Unsettled debts that are overdue or due within REMIND_DAYS, most urgent first."""
-    items = [r for r in debt_rows(user, today) if r["status"] in ("overdue", "due_soon")]
+    """Unsettled debts whose own reminder window has started (or that are overdue), most urgent first."""
+    items = [r for r in debt_rows(user, today) if r["notify"]]
     return sorted(items, key=lambda r: r["days"])
 
 
