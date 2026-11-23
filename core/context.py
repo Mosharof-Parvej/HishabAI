@@ -9,7 +9,12 @@ def shell(request):
     """Values every page needs: trial length and the repayment reminders shown in the bell."""
     ctx = {"TRIAL_DAYS": settings.TRIAL_DAYS, "SITE_AUTHOR": settings.SITE_AUTHOR, "CONTACT_EMAIL": settings.CONTACT_EMAIL}
     if getattr(request, "user", None) and request.user.is_authenticated:
-        rems = ctx["reminders"] = services.reminders(request.user, timezone.localdate())
+        today = timezone.localdate()
+        rems = ctx["reminders"] = services.reminders(request.user, today)
+        seen = request.user.seen_reminder_ids(today)
+        for r in rems:
+            r["unread"] = r["debt"].pk not in seen
+        ctx["reminders_unread"] = sum(r["unread"] for r in rems)
         ctx["reminders_data"] = [{
             "id": r["debt"].pk,
             "title": f"{r['debt'].person} · {i18n.tr('You owe' if r['debt'].direction == 'borrowed' else 'Owes you')} {taka(r['remaining'])}",

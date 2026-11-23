@@ -653,6 +653,7 @@ def accounts_delete(request, pk):
 def debts(request):
     today = timezone.localdate()
     rows = services.debt_rows(request.user, today)
+    request.user.mark_reminders_seen(services.reminders(request.user, today), today)  # you are looking at them now
     return render(request, "core/debts.html", {
         "nav": "debts", "today": today, "totals": services.debt_totals(rows),
         "owe": [r for r in rows if r["debt"].direction == "borrowed" and r["status"] != "settled"],
@@ -888,6 +889,15 @@ def settings_view(request):
             messages.success(request, "Profile saved.")
         return redirect("settings")
     return render(request, "core/settings.html", {"nav": "settings"})
+
+
+@require_POST
+@login_required
+def api_notifications_seen(request):
+    """Called when the bell is opened: everything due right now counts as seen, so the badge clears."""
+    today = timezone.localdate()
+    request.user.mark_reminders_seen(services.reminders(request.user, today), today)
+    return JsonResponse({"ok": True})
 
 
 @csrf_exempt

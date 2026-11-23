@@ -63,6 +63,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(default=timezone.now)
     trial_ends_at = models.DateTimeField(null=True, blank=True)
     plan = models.CharField(max_length=10, blank=True)  # "", "monthly", "yearly"
+    # The bell's "seen" state: reminders (debt ids) the user has already looked at on that day. Unseen ones are badged.
+    bell_seen_on = models.DateField(null=True, blank=True)
+    bell_seen_ids = models.JSONField(default=list, blank=True)
     paid_until = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
@@ -93,6 +96,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def has_access(self):
         return self.is_paid or self.trial_days_left > 0
+
+    def seen_reminder_ids(self, today):
+        return set(self.bell_seen_ids) if self.bell_seen_on == today else set()
+
+    def mark_reminders_seen(self, reminders, today):
+        """Opening the bell (or the Debts page) marks what is currently due as seen; a new reminder later is unseen again."""
+        self.bell_seen_on, self.bell_seen_ids = today, [r["debt"].pk for r in reminders]
+        self.save(update_fields=["bell_seen_on", "bell_seen_ids"])
 
     def end_subscription(self):
         """Unsubscribe: the paid plan ends now. Records stay; AI features follow the trial rules again. No auto-renewal exists to stop."""

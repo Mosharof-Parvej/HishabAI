@@ -246,3 +246,4 @@ html.theming *,html.theming *::before,html.theming *::after{transition:backgroun
 .paylines dt{color:var(--muted)}.paylines dd{margin:0;font-weight:600;text-align:right;word-break:break-all;font-variant-numeric:tabular-nums}
 .btn.disabled{opacity:.5;pointer-events:none}
 code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:.8125rem}
+.rem.unread{background:var(--primary-50);margin:0 -8px;padding:8px;border-radius:8px}

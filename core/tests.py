@@ -731,6 +731,26 @@ class AppTests(TestCase):
         self.assertContains(self.c.get(reverse("subscription")), "Cancelled")
         self.c.post(reverse("payment_cancel", args=[second.pk])); self.c.post(reverse("payment_cancel", args=[second.pk]))   # idempotent
 
+    def test_bell_badge_clears_when_opened_and_returns_for_new_reminders(self):
+        today = timezone.localdate()
+        Debt.objects.create(user=self.user, direction="lent", person="One", amount=10, due_date=today, remind_days=0)
+        page = self.c.get(reverse("dashboard"))
+        self.assertEqual(page.context["reminders_unread"], 1)
+        self.assertContains(page, 'class="dotc" data-unread')                                      # the number badge is shown
+        self.assertTrue(page.context["reminders"][0]["unread"])
+        self.assertEqual(self.c.post(reverse("api_notifications_seen")).json(), {"ok": True})     # opening the bell
+        page = self.c.get(reverse("dashboard"))
+        self.assertEqual(page.context["reminders_unread"], 0)
+        self.assertNotContains(page, "data-unread>")                                               # badge gone (bell and sidebar)
+        self.assertEqual(len(page.context["reminders"]), 1)                                       # the reminder itself is still listed
+        Debt.objects.create(user=self.user, direction="borrowed", person="Two", amount=5, due_date=today, remind_days=0)
+        self.assertEqual(self.c.get(reverse("dashboard")).context["reminders_unread"], 1)         # only the new one is unseen
+        self.user.refresh_from_db(); self.user.bell_seen_on = today - timedelta(days=1); self.user.save()
+        self.assertEqual(self.c.get(reverse("dashboard")).context["reminders_unread"], 2)         # a new day starts unseen again
+        self.c.get(reverse("debts"))                                                               # visiting Debts also counts as seen
+        self.assertEqual(self.c.get(reverse("dashboard")).context["reminders_unread"], 0)
+        self.assertEqual(Client().post(reverse("api_notifications_seen")).status_code, 302)       # login required
+
     def test_taka_filter_uses_bd_grouping(self):
         from .templatetags.ui import taka
         self.assertEqual(taka(100000), "৳1,00,000")

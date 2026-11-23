@@ -105,6 +105,11 @@ window.voice = (btn, input) => {
     m.querySelector("[data-menu-btn]").addEventListener("click", e => {
       e.stopPropagation(); const open = !m.classList.contains("open");
       menus.forEach(o => setOpen(o, false)); setOpen(m, open);
+      const url = e.currentTarget.dataset.seenUrl;   // opening the bell marks reminders as seen, like Facebook: the number goes away
+      if (open && url && document.querySelector("[data-unread]")) {
+        document.querySelectorAll("[data-unread]").forEach(b => b.remove());
+        api(url, {}).catch(() => {});
+      }
     });
     m.querySelector(".pop").addEventListener("click", e => e.stopPropagation());
   });
