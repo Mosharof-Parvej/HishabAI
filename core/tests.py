@@ -44,7 +44,7 @@ class AppTests(TestCase):
         today = timezone.localdate().isoformat()
         good = {"type": "expense", "amount": "250", "category": "Food", "date": today, "note": "Lunch", "ai": True, "confidence": 98}
         r = self.c.post(reverse("api_save_transactions"), json.dumps({"transactions": [good]}), content_type="application/json")
-        self.assertEqual(r.json(), {"saved": 1})
+        self.assertEqual(r.json(), {"saved": 1, "debts": 0})
         for bad in [{**good, "amount": "-5"}, {**good, "category": "Salary"}, {**good, "date": "2999-01-01"}, {**good, "type": "x"}]:
             r = self.c.post(reverse("api_save_transactions"), json.dumps({"transactions": [bad]}), content_type="application/json")
             self.assertEqual(r.status_code, 400)
@@ -69,6 +69,25 @@ class AppTests(TestCase):
         self.assertEqual(rows[1]["category"], "Other Income")
         self.assertEqual(rows[1]["confidence"], 100)
         self.assertEqual(rows[1]["date"], timezone.localdate().isoformat())
+
+    @patch("core.ai.ask")
+    def test_extract_and_save_debts_from_text(self, ask):
+        today = timezone.localdate()
+        ask.return_value = json.dumps({"transactions": [
+            {"type": "lent", "amount": 500, "person": "Rahim", "due_date": (today + timedelta(days=5)).isoformat(), "date": today.isoformat(), "category": "Food", "confidence": 90},
+            {"type": "borrowed", "amount": 2000, "person": "Karim", "account": "Cash", "date": today.isoformat(), "due_date": "garbage"},
+            {"type": "lent", "amount": 100, "date": today.isoformat()},  # no person -> dropped
+            {"type": "expense", "amount": 50, "category": "Food", "date": today.isoformat(), "note": "Tea"}]})
+        rows = self.c.post(reverse("api_extract"), json.dumps({"text": "x"}), content_type="application/json").json()["transactions"]
+        self.assertEqual([r["type"] for r in rows], ["lent", "borrowed", "expense"])
+        self.assertEqual((rows[0]["category"], rows[0]["note"], rows[1]["due_date"]), (None, "Rahim", ""))
+        r = self.c.post(reverse("api_save_transactions"), json.dumps({"transactions": rows}), content_type="application/json")
+        self.assertEqual(r.json(), {"saved": 3, "debts": 2})
+        self.assertEqual(sorted(Debt.objects.values_list("person", "direction")), [("Karim", "borrowed"), ("Rahim", "lent")])
+        self.assertEqual(Transaction.objects.count(), 1)
+        self.assertEqual(Debt.objects.get(person="Karim").account.name, "Cash")
+        bad = [{"type": "lent", "amount": "10", "date": today.isoformat(), "note": ""}]  # person missing
+        self.assertEqual(self.c.post(reverse("api_save_transactions"), json.dumps({"transactions": bad}), content_type="application/json").status_code, 400)
 
     @patch("core.ai.ask", side_effect=ai.AIUnavailable("down"))
     def test_ai_failure_is_json_503(self, _):

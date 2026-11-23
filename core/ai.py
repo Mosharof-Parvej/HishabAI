@@ -108,7 +108,10 @@ def _parse_json(text):
 # ---------- features ----------
 
 EXTRACT_SYSTEM = """You extract personal finance transactions from text written in Bangla, English or Banglish.
-Return ONLY JSON: {"transactions":[{"type":"expense|income","amount":number,"category":string,"account":string|null,"date":"YYYY-MM-DD","note":string,"confidence":0-100}]}
+Return ONLY JSON: {"transactions":[{"type":"expense|income|borrowed|lent","amount":number,"category":string|null,"account":string|null,"date":"YYYY-MM-DD","note":string,"person":string|null,"due_date":"YYYY-MM-DD"|null,"confidence":0-100}]}
+Debts: type "borrowed" = the user RECEIVED money to pay back later (ধার নিলাম, ধার করলাম, loan নিলাম, borrowed from X);
+type "lent" = the user GAVE money to be paid back (ধার দিলাম, ঋণ দিলাম, lent to X). For these set 'person' (the other party's name, required),
+'category' null, and 'due_date' only if a repay date is stated (resolve relative dates from TODAY). Ordinary spending/earning stays expense/income.
 Rules: amounts are in BDT (taka/tk/টাকা/৳); convert Bangla digits to numbers. One object per distinct transaction.
 Resolve relative dates (আজ=today, গতকাল/yesterday, কাল is ambiguous: use yesterday if past tense) using TODAY.
 'category' MUST be exactly one of the provided names for that type. 'note' is a short English label.
@@ -132,9 +135,13 @@ def extract_transactions(user, text, categories, accounts=()):
             amount = Decimal(str(t["amount"])).quantize(Decimal("0.01"))
             if amount <= 0 or amount > Decimal("999999999"):
                 continue
-            kind = "income" if t.get("type") == "income" else "expense"
-            cat = t.get("category")
-            if cat not in categories[kind]:
+            kind = t.get("type") if t.get("type") in ("income", "borrowed", "lent") else "expense"
+            is_debt = kind in ("borrowed", "lent")
+            person = str(t.get("person") or "").strip()[:80]
+            if is_debt and not person:
+                continue
+            cat = None if is_debt else t.get("category")
+            if not is_debt and cat not in categories[kind]:
                 cat = categories[kind][-1]  # "Others"
             try:
                 d = datetime.strptime(str(t.get("date")), "%Y-%m-%d").date()
@@ -144,9 +151,17 @@ def extract_transactions(user, text, categories, accounts=()):
                 d = today
             conf = max(0, min(100, int(t.get("confidence", 70))))
             acct = t.get("account") if t.get("account") in accounts else None
+            due = None
+            if is_debt and t.get("due_date"):
+                try:
+                    due = datetime.strptime(str(t["due_date"]), "%Y-%m-%d").date()
+                    due = due if due >= d else None
+                except ValueError:
+                    due = None
             rows.append(
                 {"type": kind, "amount": str(amount), "category": cat, "account": acct, "date": d.isoformat(),
-                 "note": str(t.get("note", ""))[:200], "confidence": conf}
+                 "note": person if is_debt else str(t.get("note", ""))[:200], "due_date": due.isoformat() if due else "",
+                 "confidence": conf}
             )
         except (KeyError, InvalidOperation, ValueError, TypeError):
             continue

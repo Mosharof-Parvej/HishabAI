@@ -283,15 +283,20 @@ def api_save_transactions(request):
     cats = {(c.kind, c.name): c for c in Category.objects.filter(user=request.user)}
     accts = {a.name: a for a in Account.objects.filter(user=request.user)}
     today = timezone.localdate()
-    objs = []
+    objs, debts = [], []
     for i, t in enumerate(items, 1):
         kind = t.get("type")
         amount = money(t.get("amount"))
+        d = parse_date(t.get("date"))
+        if kind in ("borrowed", "lent"):  # a debt: needs a person, no category
+            person = str(t.get("note", "")).strip()[:80]
+            due = parse_date(t.get("due_date")) if t.get("due_date") else None
+            if amount is None or d is None or d > today + timedelta(days=1) or not person or (due and due < d):
+                return JsonResponse({"error": f"Row {i}: enter the person, a valid amount and a repay date after the loan date."}, status=400)
+            debts.append(Debt(user=request.user, direction=kind, person=person, amount=amount, date=d, due_date=due,
+                              account=accts.get(t.get("account"))))
+            continue
         cat = cats.get((kind, t.get("category")))
-        try:
-            d = datetime.strptime(str(t.get("date")), "%Y-%m-%d").date()
-        except ValueError:
-            d = None
         if kind not in ("expense", "income") or amount is None or cat is None or d is None or d > today + timedelta(days=1):
             return JsonResponse({"error": f"Row {i} has an invalid amount, category or date."}, status=400)
         conf = t.get("confidence")
@@ -300,7 +305,8 @@ def api_save_transactions(request):
             note=str(t.get("note", ""))[:200],
             ai_generated=bool(t.get("ai")), ai_confidence=int(conf) if isinstance(conf, (int, float)) else None))
     Transaction.objects.bulk_create(objs)
-    return JsonResponse({"saved": len(objs)})
+    Debt.objects.bulk_create(debts)
+    return JsonResponse({"saved": len(objs) + len(debts), "debts": len(debts)})
 
 
 # ---------------------------------------------------------------- transactions
