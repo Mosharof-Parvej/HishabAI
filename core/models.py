@@ -195,6 +195,8 @@ class Debt(models.Model):
     due_date = models.DateField(null=True, blank=True)
     # Days before the due date to start reminding (0 = on the day); None = no reminder.
     remind_days = models.PositiveSmallIntegerField(null=True, blank=True, default=3)
+    # Or remind from a specific date instead (works even without a due date). None = not used.
+    remind_on = models.DateField(null=True, blank=True)
     note = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

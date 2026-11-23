@@ -13,7 +13,7 @@ def shell(request):
         ctx["reminders_data"] = [{
             "id": r["debt"].pk,
             "title": f"{r['debt'].person} · {i18n.tr('You owe' if r['debt'].direction == 'borrowed' else 'Owes you')} {taka(r['remaining'])}",
-            "body": (f"{abs(r['days'])}d {i18n.tr('overdue')}" if r["days"] < 0 else i18n.tr("Due today") if r["days"] == 0 else f"{i18n.tr('in')} {r['days']}d"),
+            "body": (i18n.tr("Reminder") if r["days"] is None else f"{abs(r['days'])}d {i18n.tr('overdue')}" if r["days"] < 0 else i18n.tr("Due today") if r["days"] == 0 else f"{i18n.tr('in')} {r['days']}d"),
         } for r in rems]
         ctx["ui_text"] = {k: i18n.tr(k) for k in ("Turn on notifications", "Notifications on", "Notifications blocked in browser settings")}
         ctx["ai_usage"] = services.ai_usage(request.user)

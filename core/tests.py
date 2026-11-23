@@ -364,6 +364,44 @@ class AppTests(TestCase):
         self.c.post(reverse("debt_remind", args=[later.pk]), {"remind_days": ""})
         self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Sumi"])
 
+    def test_reminder_on_a_specific_date_without_due_date(self):
+        from . import services
+        today = timezone.localdate()
+        d = lambda n: (today + timedelta(days=n)).isoformat()
+        self.c.post(reverse("debt_add"), {"direction": "lent", "person": "Today", "amount": "50", "remind_days": "date", "remind_on": d(0)})
+        self.c.post(reverse("debt_add"), {"direction": "lent", "person": "Future", "amount": "50", "remind_days": "date", "remind_on": d(5)})
+        self.c.post(reverse("debt_add"), {"direction": "lent", "person": "Missing", "amount": "50", "remind_days": "date", "remind_on": ""})  # date not picked -> refused
+        self.assertEqual(sorted(Debt.objects.values_list("person", flat=True)), ["Future", "Today"])
+        self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Today"])
+        page = self.c.get(reverse("dashboard"))
+        self.assertEqual(len(page.context["reminders_data"]), 1)
+        self.assertEqual(page.context["reminders_data"][0]["body"], "Reminder")        # no due date to count from
+        fut = Debt.objects.get(person="Future")
+        self.c.post(reverse("debt_remind", args=[fut.pk]), {"remind_days": "date", "remind_on": d(0)})   # edit later
+        self.assertEqual(sorted(r["debt"].person for r in services.reminders(self.user, today)), ["Future", "Today"])
+        self.c.post(reverse("debt_pay", args=[fut.pk]), {"amount": "50"})                # repaid -> no more reminders
+        self.assertEqual([r["debt"].person for r in services.reminders(self.user, today)], ["Today"])
+        # Smart Entry rows carry the date option too
+        row = {"type": "lent", "amount": "10", "date": today.isoformat(), "note": "Sumi", "remind_days": "date", "remind_on": d(2)}
+        self.c.post(reverse("api_save_transactions"), json.dumps({"transactions": [row]}), content_type="application/json")
+        self.assertEqual(str(Debt.objects.get(person="Sumi").remind_on), d(2))
+
+    def test_repaid_debts_move_to_closed_section(self):
+        today = timezone.localdate()
+        a = Debt.objects.create(user=self.user, direction="borrowed", person="OpenOne", amount=300)
+        b = Debt.objects.create(user=self.user, direction="lent", person="DoneOne", amount=200)
+        page = self.c.get(reverse("debts"))
+        self.assertEqual(([r["debt"].person for r in page.context["owe"]], [r["debt"].person for r in page.context["owed"]], page.context["closed"]), (["OpenOne"], ["DoneOne"], []))
+        self.c.post(reverse("debt_pay", args=[b.pk]), {"amount": "120"})                 # partly repaid: still open
+        self.assertEqual(len(self.c.get(reverse("debts")).context["closed"]), 0)
+        self.c.post(reverse("debt_pay", args=[b.pk]), {"amount": "80", "date": today.isoformat()})  # fully repaid
+        page = self.c.get(reverse("debts"))
+        self.assertEqual([r["debt"].person for r in page.context["owed"]], [])           # gone from the active list
+        self.assertEqual([r["debt"].person for r in page.context["closed"]], ["DoneOne"])
+        self.assertEqual(page.context["closed"][0]["closed_on"], today)
+        self.assertContains(page, "Closed"); self.assertContains(page, "Repaid")
+        self.assertEqual(page.context["totals"], {"owe": 300, "owed": 0})                # closed debts no longer count
+
     def test_debts_are_private(self):
         other = User.objects.create_user("o@example.com", "s3cret-pass-9")
         d = Debt.objects.create(user=other, direction="lent", person="X", amount=10)

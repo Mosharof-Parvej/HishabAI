@@ -165,3 +165,11 @@ window.trackChart = chart => { addEventListener("themechange", () => chartTheme(
   btn.addEventListener("click", async () => { await Notification.requestPermission(); label(); notify(); });
   label(); notify();
 })();
+
+/* debt reminders: choosing "On a specific date" reveals a date picker; the inline editor saves on change */
+document.querySelectorAll("select[data-remind]").forEach(sel => {
+  const form = sel.closest("form"), date = form.querySelector(".remind-date"), set = form.querySelector(".remind-set");
+  const show = () => { const on = sel.value === "date"; if (date) { date.hidden = !on; date.required = on; } if (set) set.hidden = !on; };
+  sel.addEventListener("change", () => { show(); if (sel.hasAttribute("data-auto") && sel.value !== "date") form.submit(); else if (sel.value === "date" && date) date.focus(); });
+  show();
+});

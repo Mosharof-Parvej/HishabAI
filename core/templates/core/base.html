@@ -45,7 +45,7 @@
           <div class="pop" role="menu">
             <div class="head"><h4>{% tr "Reminders" %}</h4><button type="button" id="notifToggle" hidden>{% tr "Turn on notifications" %}</button></div>
             {% for r in reminders %}<a href="{% url 'debts' %}" class="rem"><span><b>{{ r.debt.person }}</b><br><span class="sm muted">{% if r.debt.direction == 'borrowed' %}{% tr "You owe" %}{% else %}{% tr "Owes you" %}{% endif %} {{ r.remaining|taka }}</span></span>
-              <span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days < 0 %}{{ r.days|stringformat:"d"|cut:"-" }}d {% tr "overdue" %}{% elif r.days == 0 %}{% tr "Due today" %}{% else %}{% tr "in" %} {{ r.days }}d{% endif %}</span></a>
+              <span class="pill {% if r.status == 'overdue' %}expense{% else %}warnp{% endif %}">{% if r.days is None %}{% tr "Reminder" %}{% elif r.days < 0 %}{{ r.days|stringformat:"d"|cut:"-" }}d {% tr "overdue" %}{% elif r.days == 0 %}{% tr "Due today" %}{% else %}{% tr "in" %} {{ r.days }}d{% endif %}</span></a>
             {% empty %}<p class="sm muted" style="padding:10px 6px;text-align:center">{% tr "No reminders right now. Add a pay-back date to a debt to get one." %}</p>{% endfor %}
             <div style="text-align:center;padding-top:6px"><a class="link sm" style="text-decoration:underline" href="{% url 'debts' %}">{% tr "All debts" %}</a></div></div>
         </div>

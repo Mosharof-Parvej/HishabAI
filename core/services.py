@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import Max, Q, Sum
 from django.db.models.functions import TruncDay, TruncMonth
 
 from .models import AICall, Account, Budget, Debt, DebtPayment, Transaction
@@ -164,7 +164,7 @@ def account_balances(user):
 def debt_rows(user, today, open_only=False):
     """Each debt with paid/remaining and a status: settled | overdue | due_soon | open."""
     rows = []
-    for d in Debt.objects.filter(user=user).select_related("account").annotate(paid=Sum("payments__amount")):
+    for d in Debt.objects.filter(user=user).select_related("account").annotate(paid=Sum("payments__amount"), last_paid=Max("payments__date")):
         paid = d.paid or ZERO
         remaining = d.amount - paid
         days = (d.due_date - today).days if d.due_date else None
@@ -173,8 +173,11 @@ def debt_rows(user, today, open_only=False):
                   else "due_soon" if days is not None and days <= window else "open")
         if open_only and status == "settled":
             continue
-        notify = d.remind_days is not None and days is not None and days <= d.remind_days and remaining > 0
-        rows.append({"debt": d, "paid": paid, "remaining": remaining, "days": days, "status": status, "notify": notify})
+        by_days = d.remind_days is not None and days is not None and days <= d.remind_days
+        by_date = d.remind_on is not None and today >= d.remind_on
+        notify = (by_days or by_date) and remaining > 0
+        rows.append({"debt": d, "paid": paid, "remaining": remaining, "days": days, "status": status, "notify": notify,
+                     "closed_on": d.last_paid if status == "settled" else None})
     return rows
 
 
@@ -190,7 +193,7 @@ def debt_totals(rows):
 def reminders(user, today):
     """Unsettled debts whose own reminder window has started (or that are overdue), most urgent first."""
     items = [r for r in debt_rows(user, today) if r["notify"]]
-    return sorted(items, key=lambda r: r["days"])
+    return sorted(items, key=lambda r: r["days"] if r["days"] is not None else 0)
 
 
 # ---------------------------------------------------------------- AskHishabAI query

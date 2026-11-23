@@ -17,7 +17,7 @@ BN = {
     "Made by": "তৈরি করেছেন", "Free trial": "ফ্রি ট্রায়াল", "plan": "প্ল্যান", "until": "পর্যন্ত", "days left": "দিন বাকি", "of": "/",
     "Repayment reminders": "পরিশোধের রিমাইন্ডার", "No repayments due soon.": "শীঘ্রই পরিশোধের কিছু নেই।",
     "Manage debts & reminders": "ধার ও রিমাইন্ডার দেখুন", "You owe": "আপনি দেনা", "Owes you": "আপনার পাওনা",
-    "overdue": "বকেয়া", "Due today": "আজ শেষ দিন", "in": "আর",
+    "overdue": "বকেয়া", "Reminder": "রিমাইন্ডার", "Due today": "আজ শেষ দিন", "in": "আর",
     "Your free trial has ended.": "আপনার ফ্রি ট্রায়াল শেষ হয়েছে।",
     "Your records are safe, but AI features are paused.": "আপনার তথ্য নিরাপদ আছে, তবে AI সুবিধা বন্ধ।", "Choose a plan": "প্ল্যান বেছে নিন",
     # dashboard

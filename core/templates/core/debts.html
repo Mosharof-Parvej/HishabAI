@@ -16,7 +16,8 @@
       <div class="field"><label>Amount (৳)</label><input name="amount" type="number" min="0.01" step="0.01" required></div>
       <div class="field"><label>Date</label><input name="date" type="date" value="{{ today|date:'Y-m-d' }}"></div>
       <div class="field"><label>Repay by</label><input name="due_date" type="date"></div>
-      <div class="field"><label>🔔 Remind me</label><select name="remind_days"><option value="3">3 days before</option><option value="0">On the due date</option><option value="1">1 day before</option><option value="7">7 days before</option><option value="">No reminder</option></select></div>
+      <div class="field"><label>🔔 Remind me</label><select name="remind_days" data-remind><option value="3">3 days before</option><option value="0">On the due date</option><option value="1">1 day before</option><option value="7">7 days before</option><option value="date">On a specific date…</option><option value="">No reminder</option></select>
+        <input type="date" name="remind_on" class="remind-date" hidden style="margin-top:6px"></div>
       <div class="field"><label>Account</label><select name="account"><option value="">No account</option>{% for a in accts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
       <div class="field"><label>Note</label><input name="note" maxlength="200"></div></div>
     <button class="btn primary">Save debt</button></form></div>
@@ -24,4 +25,5 @@
   <div class="card"><h3>I owe</h3>{% include "core/_debt_list.html" with rows=owe %}</div>
   <div class="card"><h3>Owed to me</h3>{% include "core/_debt_list.html" with rows=owed %}</div>
 </div>
+<div class="card" style="margin-top:14px"><h3>Closed <span class="subtle">· fully repaid</span></h3>{% include "core/_debt_list.html" with rows=closed %}</div>
 {% endblock %}

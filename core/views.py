@@ -96,11 +96,14 @@ def user_account(user, pk):
 REMIND_CHOICES = {0, 1, 3, 7}
 
 
-def parse_remind(value, due):
-    """'' / missing / no due date -> None (no reminder); otherwise one of REMIND_CHOICES."""
+def parse_remind(value, due, remind_on=None):
+    """-> (remind_days, remind_on). 'date' uses the chosen calendar date; 0/1/3/7 count back from the due date
+    (so they need one); anything else means no reminder."""
+    if value == "date":
+        return None, parse_date(remind_on)
     if due is None or not str(value or "").isdigit() or int(value) not in REMIND_CHOICES:
-        return None
-    return int(value)
+        return None, None
+    return int(value), None
 
 
 def money(value):
@@ -326,8 +329,9 @@ def api_save_transactions(request):
             due = parse_date(t.get("due_date")) if t.get("due_date") else None
             if amount is None or d is None or d > today + timedelta(days=1) or not person or (due and due < d):
                 return JsonResponse({"error": f"Row {i}: enter the person, a valid amount and a repay date after the loan date."}, status=400)
+            rd, ro = parse_remind(t.get("remind_days"), due, t.get("remind_on"))
             debts.append(Debt(user=request.user, direction=kind, person=person, amount=amount, date=d, due_date=due,
-                              remind_days=parse_remind(t.get("remind_days"), due), account=accts.get(t.get("account"))))
+                              remind_days=rd, remind_on=ro, account=accts.get(t.get("account"))))
             continue
         cat = cats.get((kind, t.get("category")))
         if kind not in ("expense", "income") or amount is None or cat is None or d is None or d > today + timedelta(days=1):
@@ -648,8 +652,9 @@ def debts(request):
     rows = services.debt_rows(request.user, today)
     return render(request, "core/debts.html", {
         "nav": "debts", "today": today, "totals": services.debt_totals(rows),
-        "owe": [r for r in rows if r["debt"].direction == "borrowed"],
-        "owed": [r for r in rows if r["debt"].direction == "lent"],
+        "owe": [r for r in rows if r["debt"].direction == "borrowed" and r["status"] != "settled"],
+        "owed": [r for r in rows if r["debt"].direction == "lent" and r["status"] != "settled"],
+        "closed": sorted((r for r in rows if r["status"] == "settled"), key=lambda r: r["closed_on"] or r["debt"].date, reverse=True),
         "accts": Account.objects.filter(user=request.user), "error": request.GET.get("error", "")[:200]})
 
 
@@ -665,8 +670,11 @@ def debt_add(request):
         return fail("Enter who, how much and whether you borrowed or lent.")
     if due and due < d:
         return fail("The due date cannot be before the date of the loan.")
+    rd, ro = parse_remind(p.get("remind_days"), due, p.get("remind_on"))
+    if p.get("remind_days") == "date" and ro is None:
+        return fail("Pick the date you want to be reminded on.")
     Debt.objects.create(user=request.user, direction=p["direction"], person=person, amount=amount, date=d, due_date=due,
-                        remind_days=parse_remind(p.get("remind_days"), due),
+                        remind_days=rd, remind_on=ro,
                         account=user_account(request.user, p.get("account")), note=p.get("note", "").strip()[:200])
     messages.success(request, "Saved.")
     return redirect("debts")
@@ -693,10 +701,14 @@ def debt_pay(request, pk):
 @login_required
 def debt_remind(request, pk):
     debt = Debt.objects.filter(user=request.user, pk=pk).first()
-    if debt and debt.due_date:
-        debt.remind_days = parse_remind(request.POST.get("remind_days"), debt.due_date)
-        debt.save(update_fields=["remind_days"])
-        messages.success(request, "Reminder updated.")
+    if debt:
+        rd, ro = parse_remind(request.POST.get("remind_days"), debt.due_date, request.POST.get("remind_on"))
+        if request.POST.get("remind_days") == "date" and ro is None:
+            messages.error(request, "Pick the date you want to be reminded on.")
+        else:
+            debt.remind_days, debt.remind_on = rd, ro
+            debt.save(update_fields=["remind_days", "remind_on"])
+            messages.success(request, "Reminder updated.")
     return redirect("debts")
 
 

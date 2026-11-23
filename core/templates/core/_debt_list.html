@@ -1,15 +1,22 @@
 {% load ui %}{% for r in rows %}
 <div class="debt {{ r.status }}">
-  <div class="row between"><b>{{ r.debt.person }}</b>
-    <span>{% if r.status == 'settled' %}<span class="pill income">Settled</span>{% elif r.status == 'overdue' %}<span class="pill expense">{{ r.days|stringformat:"d"|cut:"-" }}d overdue</span>{% elif r.status == 'due_soon' %}<span class="pill warnp">{% if r.days == 0 %}Due today{% else %}Due in {{ r.days }}d{% endif %}</span>{% endif %}</span></div>
-  <div class="row between sm"><span class="muted">{{ r.debt.amount|taka }} · {{ r.debt.date|date:"j M Y" }}{% if r.debt.due_date %} · repay by {{ r.debt.due_date|date:"j M Y" }}{% endif %}{% if r.debt.account %} · {{ r.debt.account.name }}{% endif %}</span><b>{{ r.remaining|taka }} left</b></div>
-  {% if r.debt.due_date and r.status != 'settled' %}<form method="post" action="{% url 'debt_remind' r.debt.pk %}" class="row sm">{% csrf_token %}<span class="muted">🔔 Remind</span>
-    <select name="remind_days" onchange="this.form.submit()" style="width:150px;padding:4px 8px">
-      <option value="" {% if r.debt.remind_days is None %}selected{% endif %}>No reminder</option>
+  <div class="row between"><b>{{ r.debt.person }}{% if r.status == 'settled' %} <span class="sm muted">· {% if r.debt.direction == 'borrowed' %}I repaid{% else %}They repaid me{% endif %}</span>{% endif %}</b>
+    <span>{% if r.status == 'settled' %}<span class="pill income">✓ Closed</span>{% elif r.status == 'overdue' %}<span class="pill expense">{{ r.days|stringformat:"d"|cut:"-" }}d overdue</span>{% elif r.status == 'due_soon' %}<span class="pill warnp">{% if r.days == 0 %}Due today{% else %}Due in {{ r.days }}d{% endif %}</span>{% endif %}</span></div>
+  <div class="row between sm"><span class="muted">{{ r.debt.amount|taka }} · {{ r.debt.date|date:"j M Y" }}{% if r.debt.due_date %} · repay by {{ r.debt.due_date|date:"j M Y" }}{% endif %}{% if r.debt.account %} · {{ r.debt.account.name }}{% endif %}</span>
+    {% if r.status == 'settled' %}<b>{% if r.closed_on %}Repaid {{ r.closed_on|date:"j M Y" }}{% else %}Repaid{% endif %}</b>{% else %}<b>{{ r.remaining|taka }} left</b>{% endif %}</div>
+  {% if r.status != 'settled' %}
+  <form method="post" action="{% url 'debt_remind' r.debt.pk %}" class="row sm wrap">{% csrf_token %}<span class="muted">🔔 Remind</span>
+    <select name="remind_days" data-remind data-auto style="width:170px;padding:4px 8px">
+      <option value="" {% if r.debt.remind_days is None and not r.debt.remind_on %}selected{% endif %}>No reminder</option>
       <option value="0" {% if r.debt.remind_days == 0 %}selected{% endif %}>On the due date</option>
       <option value="1" {% if r.debt.remind_days == 1 %}selected{% endif %}>1 day before</option>
       <option value="3" {% if r.debt.remind_days == 3 %}selected{% endif %}>3 days before</option>
-      <option value="7" {% if r.debt.remind_days == 7 %}selected{% endif %}>7 days before</option></select></form>{% endif %}
+      <option value="7" {% if r.debt.remind_days == 7 %}selected{% endif %}>7 days before</option>
+      <option value="date" {% if r.debt.remind_on %}selected{% endif %}>On a specific date…</option></select>
+    <input type="date" name="remind_on" class="remind-date" value="{{ r.debt.remind_on|date:'Y-m-d' }}" {% if not r.debt.remind_on %}hidden{% endif %} style="width:150px;padding:4px 8px">
+    <button class="btn sm outline remind-set" {% if not r.debt.remind_on %}hidden{% endif %}>Set</button>
+    {% if r.debt.remind_on %}<span class="muted">· from {{ r.debt.remind_on|date:"j M Y" }}</span>{% endif %}</form>
+  {% endif %}
   {% if r.debt.note %}<div class="sm muted">{{ r.debt.note }}</div>{% endif %}
   <div class="bar"><i style="width:{% widthratio r.paid r.debt.amount 100 %}%"></i></div>
   <div class="row between">
