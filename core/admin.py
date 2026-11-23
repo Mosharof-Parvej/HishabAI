@@ -1,0 +1,8 @@
+from django.contrib import admin
+
+from . import models
+
+admin.site.register(models.User)
+admin.site.register(models.Category)
+admin.site.register(models.Transaction)
+admin.site.register(models.Budget)

@@ -1,0 +1,52 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}Dashboard{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block sub %}{{ today|date:"l, j F Y" }} · Welcome back, {{ user.display_name }}{% endblock %}
+{% block content %}
+<form class="aibar" action="{% url 'smart_entry' %}">
+  <span class="spark">✦</span>
+  <input name="text" placeholder="Tell AI what you spent or earned… e.g. “Lunch 250 tk, rickshaw 60 tk”" required>
+  <button class="btn primary" type="submit">Add with AI</button>
+</form>
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="card stat"><div class="lbl">Total Income <span class="chip g">+</span></div><div class="val">{{ cur.income|taka }}</div>
+    {% if income_change is not None %}<span class="sm {% if income_change >= 0 %}income{% else %}expense{% endif %}">{{ income_change|stringformat:"+d" }}% vs last month</span>{% else %}<span class="sm muted">This month</span>{% endif %}</div>
+  <div class="card stat"><div class="lbl">Total Expense <span class="chip r">−</span></div><div class="val">{{ cur.expense|taka }}</div>
+    {% if expense_change is not None %}<span class="sm {% if expense_change <= 0 %}income{% else %}expense{% endif %}">{{ expense_change|stringformat:"+d" }}% vs last month</span>{% else %}<span class="sm muted">This month</span>{% endif %}</div>
+  <div class="card stat"><div class="lbl">Balance <span class="chip b">৳</span></div><div class="val">{{ cur.balance|taka }}</div><span class="sm muted">Available this month</span></div>
+  <div class="card stat"><div class="lbl">Savings Rate <span class="chip y">%</span></div><div class="val">{{ cur.savings_rate }}%</div><span class="sm muted">Goal 30%</span></div>
+</div>
+<div class="grid g2" style="margin-bottom:16px">
+  <div class="card"><h3>Income vs Expense <span class="muted sm">· Last 6 months</span></h3><div class="chart-box"><canvas id="bars"></canvas></div></div>
+  <div class="card"><h3>Spending by Category</h3>
+    {% if cats %}<div class="row"><div style="width:130px;height:130px;position:relative"><canvas id="donut"></canvas></div>
+    <div style="flex:1">{% for c in cats %}<div class="row between sm" style="padding:3px 0"><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.name }}</span><b>{{ c.share }}%</b></div>{% endfor %}</div></div>
+    {% else %}<p class="muted">No expenses yet this month.</p>{% endif %}</div>
+</div>
+<div class="grid g2e">
+  <div class="card"><div class="row between"><h3>Recent Transactions</h3><a class="income sm" href="{% url 'transactions' %}"><b>View all →</b></a></div>
+    {% for t in recent %}<div class="tx"><span class="ic" style="background:{{ t.category.color|default:'#94A3B8' }}22;color:{{ t.category.color|default:'#64748B' }}">{{ t.category.name|default:"?"|slice:":1" }}</span>
+      <div class="grow"><b>{{ t.note|default:t.category.name }}</b>{% if t.ai_generated %} <span class="tag">AI</span>{% endif %}<div class="sm muted">{{ t.category.name }} · {{ t.date|date:"j M" }}</div></div>
+      <b class="{{ t.kind }}">{% if t.kind == 'expense' %}−{% else %}+{% endif %}{{ t.amount|taka }}</b></div>
+    {% empty %}<p class="muted">Nothing yet — try the AI bar above.</p>{% endfor %}</div>
+  <div class="card insight"><h3><span class="spark">✦</span> AI Insight</h3><p id="insight" class="muted">Analysing your spending…</p>
+    <p style="margin-top:12px"><a class="income" href="{% url 'assistant' %}"><b>Ask the assistant →</b></a></p></div>
+</div>
+{{ series|json_script:"series-data" }}{{ donut|json_script:"donut-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const S = JSON.parse(document.getElementById("series-data").textContent);
+new Chart(document.getElementById("bars"), {type:"bar",
+  data:{labels:S.map(x=>x.label),datasets:[{label:"Income",data:S.map(x=>x.income),backgroundColor:"#059669",borderRadius:4},{label:"Expense",data:S.map(x=>x.expense),backgroundColor:"#FB7185",borderRadius:4}]},
+  options:{maintainAspectRatio:false,plugins:{legend:{position:"top",align:"end"}},scales:{y:{grid:{color:"#F1F5F9"},ticks:{callback:v=>v>=1000?v/1000+"k":v}},x:{grid:{display:false}}}}});
+const D = JSON.parse(document.getElementById("donut-data").textContent);
+if (D.values.length) new Chart(document.getElementById("donut"), {type:"doughnut",
+  data:{labels:D.labels,datasets:[{data:D.values,backgroundColor:D.colors,borderWidth:0}]},
+  options:{cutout:"68%",plugins:{legend:{display:false}}}});
+const box = document.getElementById("insight");
+api("{% url 'api_insight' %}").then(d => box.textContent = d.text || "Add a few transactions and I'll share insights here.")
+  .catch(e => box.textContent = e.message);
+</script>
+{% endblock %}

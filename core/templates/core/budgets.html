@@ -1,0 +1,54 @@
+{% extends "core/base.html" %}{% load ui %}
+{% block title %}Budgets & Reports{% endblock %}
+{% block heading %}Budgets &amp; Reports{% endblock %}
+{% block sub %}Set monthly limits and review where your money goes{% endblock %}
+{% block content %}
+<div class="row between wrap" style="margin-bottom:16px">
+  <form class="row" method="get"><select name="month" onchange="this.form.submit()" style="width:170px">
+    {% for m in months_list %}<option value="{{ m|date:'Y-m' }}" {% if m.year == month.year and m.month == month.month %}selected{% endif %}>{{ m|date:"F Y" }}</option>{% endfor %}</select>
+    <div class="seg"><a href="?month={{ month|date:'Y-m' }}" class="{% if not yearly %}on{% endif %}">Monthly</a><a href="?month={{ month|date:'Y-m' }}&view=yearly" class="{% if yearly %}on{% endif %}">Yearly</a></div>
+  </form>
+  <button class="btn outline no-print" onclick="window.print()">⬇ Export PDF</button>
+</div>
+<div class="grid g2e" style="margin-bottom:16px">
+  <div class="card"><div class="row between"><h3>{% if yearly %}Yearly{% else %}Monthly{% endif %} Budgets</h3><a href="#edit" class="income sm no-print"><b>+ Edit budgets</b></a></div>
+    {% for b in status %}<div class="budget-row"><div class="row between"><b>{{ b.category.name }}</b><span class="sm muted">{{ b.spent|taka }} / {{ b.limit|taka }}</span></div>
+      <div class="bar {% if b.level == 'danger' %}danger{% elif b.level == 'warn' %}warn{% endif %}"><i style="width:{{ b.pct|pct_cap }}%"></i></div>
+      <div class="row between sm"><span class="muted">{% if b.left >= 0 %}{{ b.left|taka }} left{% else %}Over by {{ b.left|taka }}{% endif %}</span><b class="{% if b.level == 'ok' %}income{% elif b.level == 'danger' %}expense{% endif %}">{{ b.pct }}%</b></div></div>
+    {% empty %}<p class="muted">No budgets yet. Set limits below to get alerts.</p>{% endfor %}</div>
+  <div class="card"><h3>Daily Spending <span class="muted sm">· {{ month|date:"F" }}</span></h3><div class="chart-box"><canvas id="daily"></canvas></div></div>
+</div>
+<div class="grid g2e">
+  <div class="card insight no-print"><h3><span class="spark">✦</span> AI Budget Suggestions</h3>
+    <div id="tips" class="muted">Get personalised tips based on your spending.</div>
+    <p style="margin-top:12px"><button class="btn outline sm" id="tipbtn">Generate suggestions</button></p></div>
+  <div class="card"><h3>Category Breakdown</h3>
+    <table><thead><tr><th>Category</th><th class="right">Amount</th><th>Share</th><th class="right">vs prev month</th></tr></thead>
+    {% for c in cats %}<tr><td><span class="row"><i class="dot" style="background:{{ c.color }}"></i>{{ c.name }}</span></td><td class="right"><b>{{ c.total|taka }}</b></td>
+      <td><div class="bar" style="width:70px;display:inline-block;margin:0"><i style="width:{{ c.share }}%;background:{{ c.color }}"></i></div> <span class="sm muted">{{ c.share }}%</span></td>
+      <td class="right sm">{% if c.vs is None %}<span class="muted">—</span>{% elif c.vs > 0 %}<b class="expense">▲ {{ c.vs }}%</b>{% elif c.vs < 0 %}<b class="income">▼ {{ c.vs|stringformat:"d"|cut:"-" }}%</b>{% else %}<span class="muted">0%</span>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">No expenses in this period.</td></tr>{% endfor %}</table></div>
+</div>
+<div class="card no-print" id="edit" style="margin-top:16px"><h3>Edit monthly budgets <span class="muted sm">(leave empty for no limit)</span></h3>
+  <form method="post" action="{% url 'budgets_save' %}">{% csrf_token %}
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
+      {% for e in expense_cats %}<div><label>{{ e.c.name }}</label><input type="number" min="0" step="1" name="limit_{{ e.c.id }}" value="{{ e.limit|default_if_none:''|stringformat:'s'|cut:'.00' }}" placeholder="৳ per month"></div>{% endfor %}
+    </div><p style="margin-top:14px"><button class="btn primary">Save budgets</button></p></form></div>
+{{ daily|json_script:"daily-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const D = JSON.parse(document.getElementById("daily-data").textContent);
+new Chart(document.getElementById("daily"), {type:"line",
+  data:{labels:D.map((_, i) => i + 1),datasets:[{data:D,borderColor:"#059669",backgroundColor:"#05966922",fill:true,tension:.3,pointRadius:2}]},
+  options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c => taka(c.parsed.y)}}},scales:{y:{grid:{color:"#F1F5F9"},beginAtZero:true},x:{grid:{display:false}}}}});
+document.getElementById("tipbtn").onclick = async e => {
+  const b = e.target, box = document.getElementById("tips"); b.disabled = true; box.textContent = "Thinking…";
+  try { const d = await api("{% url 'api_budget_suggestions' %}"); box.innerHTML = ""; const ul = document.createElement("ul"); ul.style.cssText = "margin:0;padding-left:18px;display:grid;gap:8px;color:var(--text)";
+    d.tips.forEach(t => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); }); box.appendChild(ul); }
+  catch (err) { box.textContent = err.message; }
+  b.disabled = false;
+};
+</script>
+{% endblock %}

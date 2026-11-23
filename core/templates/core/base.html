@@ -1,0 +1,50 @@
+{% load static ui %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}ExpenseAI{% endblock %} · ExpenseAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'core/css/app.css' %}">
+</head>
+<body>
+{% block body %}
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo">৳</span>ExpenseAI</div>
+    <nav class="nav">
+      <a href="{% url 'dashboard' %}" class="{% if nav == 'dashboard' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+      <a href="{% url 'smart_entry' %}" class="{% if nav == 'entry' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Smart Entry</a>
+      <a href="{% url 'transactions' %}" class="{% if nav == 'transactions' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Transactions</a>
+      <a href="{% url 'budgets' %}" class="{% if nav == 'budgets' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>Budgets &amp; Reports</a>
+      <a href="{% url 'assistant' %}" class="{% if nav == 'assistant' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>AI Assistant</a>
+      <a href="{% url 'subscription' %}" class="{% if nav == 'subscription' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Subscription</a>
+      <a href="{% url 'settings' %}" class="{% if nav == 'settings' %}active{% endif %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</a>
+    </nav>
+    <div class="trial">
+      {% if user.is_paid %}
+        <b>{{ user.plan|title }} plan</b><span class="sm muted">Active until {{ user.paid_until|date:"j M Y" }}</span>
+      {% else %}
+        <b>Free Trial</b><span class="sm muted">{{ user.trial_days_left }} of 30 days left</span>
+        <div class="bar {% if user.trial_days_left < 4 %}danger{% endif %}"><i style="width:{% widthratio user.trial_days_left 30 100 %}%"></i></div>
+        <a class="btn primary block sm" href="{% url 'subscription' %}">Upgrade Plan</a>
+      {% endif %}
+    </div>
+  </aside>
+  <main>
+    <div class="top">
+      <div><h1>{% block heading %}{% endblock %}</h1><p class="muted sm">{% block sub %}{% endblock %}</p></div>
+      <div class="top-r">
+        <form action="{% url 'transactions' %}"><input class="search" name="q" placeholder="Search transactions" value="{{ f.q }}"></form>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="avatar" title="Log out ({{ user.email }})" style="border:0;cursor:pointer">{{ user.initials }}</button></form>
+      </div>
+    </div>
+    {% if not user.has_access %}<div class="notice" style="margin-bottom:16px"><b>Your free trial has ended.</b> Your records are safe, but AI features are paused. <a href="{% url 'subscription' %}" style="text-decoration:underline">Choose a plan</a></div>{% endif %}
+    {% if messages %}<div class="msgs">{% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}
+<script src="{% static 'core/js/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body></html>

@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}
+{% block title %}Smart Entry{% endblock %}
+{% block heading %}Smart Entry{% endblock %}
+{% block sub %}Describe transactions in Bangla, English or Banglish — AI does the rest{% endblock %}
+{% block content %}
+<div class="card" style="margin-bottom:16px">
+  <label>What did you spend or earn?</label>
+  <textarea id="text" rows="4" placeholder="আজ দুপুরে খাবারে ২৫০ টাকা, রিকশা ভাড়া ৬০ টাকা দিলাম, আর টিউশনি থেকে ৫০০০ টাকা পেলাম।">{{ prefill }}</textarea>
+  <div class="row between wrap" style="margin-top:10px">
+    <div class="row sm"><span class="tag" id="lang">Detected: English</span><span class="muted">Tip: you can add many transactions in one message</span></div>
+    <div class="row"><button type="button" class="btn" id="mic" title="Speak (Bangla)">🎤</button><button class="btn primary" id="go">✦ Extract with AI</button></div>
+  </div>
+  <div class="msg error" id="err" style="display:none;margin-top:12px"></div>
+</div>
+<div class="card" id="review" style="display:none">
+  <h3><span class="spark">✦</span> AI found <span id="count">0</span> transaction(s)</h3>
+  <p class="muted sm" style="margin-bottom:8px">Review the details below. You can change any field before saving.</p>
+  <div style="overflow-x:auto"><table><thead><tr><th>Type</th><th>Amount</th><th>Category</th><th>Date</th><th>Note</th><th>AI confidence</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <p style="margin-top:8px"><a href="#" class="income sm" id="addrow"><b>+ Add a row manually</b></a></p>
+  <div class="notice row between wrap" style="margin-top:14px">
+    <span>ⓘ Nothing is saved until you click Confirm. AI can make mistakes — please check amounts and categories.</span>
+    <span class="sm">Total expense: <b id="te">৳0</b> · Total income: <b id="ti" class="income">৳0</b></span>
+  </div>
+  <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" id="discard">Discard</button><button class="btn primary" id="save">Confirm &amp; Save</button></div>
+</div>
+{{ cats|json_script:"cats-data" }}
+{% endblock %}
+{% block scripts %}
+<script>
+const CATS = JSON.parse(document.getElementById("cats-data").textContent);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = "{{ today|date:'Y-m-d' }}";
+const showErr = m => { $("err").textContent = m || ""; $("err").style.display = m ? "block" : "none"; };
+const catOpts = (kind, sel) => CATS.filter(c => c.kind === kind).map(c => `<option ${c.name === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+
+function addRow(t) {
+  const tr = document.createElement("tr");
+  const conf = t.confidence;
+  tr.dataset.ai = conf == null ? "" : "1";
+  tr.dataset.conf = conf ?? "";
+  tr.innerHTML = `
+    <td><select class="k" style="width:105px"><option value="expense" ${t.type==="expense"?"selected":""}>Expense</option><option value="income" ${t.type==="income"?"selected":""}>Income</option></select></td>
+    <td><input class="a" type="number" min="0.01" step="0.01" value="${esc(t.amount)}" style="width:110px"></td>
+    <td><select class="c" style="width:150px">${catOpts(t.type, t.category)}</select></td>
+    <td><input class="d" type="date" max="${today}" value="${esc(t.date || today)}" style="width:140px"></td>
+    <td><input class="n" value="${esc(t.note)}" maxlength="200"></td>
+    <td style="width:120px">${conf == null ? '<span class="muted sm">manual</span>' : `<div class="bar ${conf<80?"warn":""}"><i style="width:${conf}%"></i></div><span class="sm">${conf}%</span>`}</td>
+    <td><button class="btn sm danger x" type="button">✕</button></td>`;
+  tr.querySelector(".k").onchange = e => { tr.querySelector(".c").innerHTML = catOpts(e.target.value, ""); totals(); };
+  tr.querySelector(".x").onclick = () => { tr.remove(); totals(); };
+  tr.querySelector(".a").oninput = totals;
+  $("rows").appendChild(tr); totals();
+}
+function totals() {
+  let e = 0, i = 0, n = 0;
+  document.querySelectorAll("#rows tr").forEach(tr => { n++; const v = +tr.querySelector(".a").value || 0; tr.querySelector(".k").value === "income" ? i += v : e += v; });
+  $("te").textContent = taka(e); $("ti").textContent = taka(i); $("count").textContent = n;
+  $("save").textContent = `Confirm & Save (${n})`; $("save").disabled = !n;
+}
+$("text").oninput = () => $("lang").textContent = "Detected: " + (/[ঀ-৿]/.test($("text").value) ? "বাংলা" : "English");
+voice($("mic"), $("text"));
+
+$("go").onclick = async () => {
+  showErr(""); const text = $("text").value.trim(); if (!text) return showErr("Write something first.");
+  $("go").disabled = true; $("go").textContent = "Thinking…";
+  try {
+    const d = await api("{% url 'api_extract' %}", {text});
+    $("rows").innerHTML = ""; d.transactions.forEach(addRow); $("review").style.display = "block";
+  } catch (e) { showErr(e.message); }
+  $("go").disabled = false; $("go").textContent = "✦ Extract with AI";
+};
+$("addrow").onclick = e => { e.preventDefault(); addRow({type:"expense", amount:"", category:"", date:today, note:""}); $("review").style.display = "block"; };
+$("discard").onclick = () => { $("rows").innerHTML = ""; $("review").style.display = "none"; };
+$("save").onclick = async () => {
+  const items = [...document.querySelectorAll("#rows tr")].map(tr => ({
+    type: tr.querySelector(".k").value, amount: tr.querySelector(".a").value, category: tr.querySelector(".c").value,
+    date: tr.querySelector(".d").value, note: tr.querySelector(".n").value, ai: !!tr.dataset.ai, confidence: tr.dataset.conf === "" ? null : +tr.dataset.conf}));
+  $("save").disabled = true;
+  try { await api("{% url 'api_save_transactions' %}", {transactions: items}); location.href = "{% url 'dashboard' %}"; }
+  catch (e) { showErr(e.message); $("save").disabled = false; }
+};
+$("text").oninput();
+{% if prefill %}$("go").click();{% endif %}
+</script>
+{% endblock %}

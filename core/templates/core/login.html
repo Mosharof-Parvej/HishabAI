@@ -1,0 +1,32 @@
+{% extends "core/base.html" %}{% load static %}
+{% block title %}{% if mode == 'signup' %}Sign up{% else %}Log in{% endif %}{% endblock %}
+{% block body %}
+<div class="auth">
+  <section class="auth-l">
+    <div class="brand" style="padding:0"><span class="logo" style="background:#fff;color:var(--primary)">৳</span>ExpenseAI</div>
+    <h2>Track your money<br>just by typing.</h2>
+    <p>Write in Bangla or English — AI records, categorizes and analyzes it for you.</p>
+    <div class="demo"><span class="sm muted">Try typing:</span><br>আজ বাজারে ৫৪০ টাকা খরচ হলো</div>
+    <div class="demo"><span class="spark">✦</span> <span class="sm muted">AI extracted 1 transaction</span><br><b>Groceries</b> · Expense · Today <b class="expense" style="float:right">−৳540</b></div>
+    <p class="sm" style="opacity:.85">30-day free trial · No card required · Your data stays yours</p>
+  </section>
+  <section class="auth-r">
+    <form method="post" novalidate>{% csrf_token %}
+      <h1>{% if mode == 'signup' %}Create your account{% else %}Welcome back{% endif %}</h1>
+      <p class="muted" style="margin-bottom:20px">{% if mode == 'signup' %}Start your 30-day free trial.{% else %}Log in to continue tracking your expenses.{% endif %}</p>
+      {% for m in messages %}<div class="msg error" style="margin-bottom:12px">{{ m }}</div>{% endfor %}
+      {% if error %}<div class="msg error" style="margin-bottom:12px">{{ error }}</div>{% endif %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+      {% if mode == 'signup' %}<div class="field"><label>Name</label><input name="name" autocomplete="name" placeholder="Your name"></div>{% endif %}
+      <div class="field"><label>Email</label><input type="email" name="email" required autocomplete="email" placeholder="you@example.com"></div>
+      <div class="field"><label>Password</label><input type="password" name="password" required autocomplete="{% if mode == 'signup' %}new-password{% else %}current-password{% endif %}" placeholder="{% if mode == 'signup' %}At least 8 characters{% else %}Your password{% endif %}"></div>
+      {% if mode == 'login' %}<label class="row" style="font-weight:400"><input type="checkbox" name="remember" value="1" checked style="width:auto"> Remember me</label><br>{% endif %}
+      <button class="btn primary block">{% if mode == 'signup' %}Create account{% else %}Log in{% endif %}</button>
+      {% if google %}<div class="divider">or</div><a class="btn block" href="{% url 'google_start' %}">Continue with Google</a>{% endif %}
+      <p class="sm muted" style="text-align:center;margin-top:18px">
+        {% if mode == 'signup' %}Have an account? <a class="income" href="{% url 'login' %}"><b>Log in</b></a>
+        {% else %}New here? <a class="income" href="{% url 'signup' %}"><b>Create a free account</b></a>{% endif %}</p>
+    </form>
+  </section>
+</div>
+{% endblock %}
